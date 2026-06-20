@@ -21,6 +21,11 @@ class Olama_Core_Container {
     }
 
     public function init() {
+        if (is_admin() && get_option('olama_core_db_version') !== OLAMA_CORE_VERSION) {
+            Olama_Core_Migrator::create_tables();
+            update_option('olama_core_db_version', OLAMA_CORE_VERSION);
+        }
+
         if (is_admin() && !$this->admin_initialized) {
             $this->admin_initialized = true;
             $this->admin = new Olama_Core_Admin($this);

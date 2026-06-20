@@ -94,7 +94,7 @@ class Olama_Core_Admin {
         $this->render_action_link('لوحة العائلة 360', $this->family_360_admin_url('olama-core-family-360', 0, $default_study_year), 'olama-btn-secondary');
         $this->render_action_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', 0, $default_study_year), 'olama-btn-ghost');
         $this->render_action_link('بطاقة الطالب', $this->admin_page_url('olama-core-student-card', array('study_year' => $default_study_year)), 'olama-btn-ghost');
-        $this->render_action_link('المزامنة اليدوية', admin_url('admin.php?page=olama-oracle-sync'), 'olama-btn-ghost');
+        $this->render_action_link('المزامنة اليدوية', admin_url('admin.php?page=olama-oracle-sync-manual'), 'olama-btn-ghost');
         echo '</div></section>';
 
         echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">حالة المزامنة</h2></div>';
@@ -276,8 +276,8 @@ class Olama_Core_Admin {
 
         if ('' !== $filters['s']) {
             $like = '%' . $wpdb->esc_like($filters['s']) . '%';
-            $where[] = '(f.family_uid LIKE %s OR f.oracle_family_id LIKE %s OR f.sponsor_full_name LIKE %s OR f.father_name LIKE %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s OR f.primary_mobile LIKE %s OR f.address LIKE %s)';
-            $values = array_merge($values, array_fill(0, 8, $like));
+            $where[] = '(f.family_uid LIKE %s OR f.oracle_family_id LIKE %s OR f.sponsor_full_name LIKE %s OR f.father_name LIKE %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s OR f.primary_mobile LIKE %s OR f.address LIKE %s OR f.family_address LIKE %s OR f.trans_region_name LIKE %s)';
+            $values = array_merge($values, array_fill(0, 10, $like));
         }
         if ('' !== $filters['status']) {
             $where[] = 'f.family_status = %s';
@@ -315,9 +315,9 @@ class Olama_Core_Admin {
             $this->table_cell($row, 'father_mobile');
             $this->table_cell($row, 'mother_name');
             $this->table_cell($row, 'mother_mobile');
-            $this->table_cell($row, 'address');
+            echo '<td>' . esc_html($this->display_value($this->value($row, 'trans_region_name') ? $this->value($row, 'trans_region_name') : ($this->value($row, 'family_address') ? $this->value($row, 'family_address') : $this->value($row, 'address')))) . '</td>';
             echo '<td class="olama-number">' . esc_html(number_format_i18n((int) $row['students_count'])) . '</td>';
-            echo '<td>' . $this->status_badge($this->value($row, 'family_status')) . '</td>';
+            echo '<td>' . $this->status_badge($this->value($row, 'family_status_name') ? $this->value($row, 'family_status_name') : $this->value($row, 'family_status')) . '</td>';
             echo '<td>' . esc_html($this->display_date($this->value($row, 'last_synced_at'), true)) . '</td>';
             echo '<td><div class="olama-actions olama-row-actions">';
             $this->render_row_link('360', $this->family_360_admin_url('olama-core-family-360', $family_id, $study_year), $family_id);
@@ -345,12 +345,16 @@ class Olama_Core_Admin {
 
         if ('' !== $filters['s']) {
             $like = '%' . $wpdb->esc_like($filters['s']) . '%';
-            $where[] = '(s.student_uid LIKE %s OR s.student_name LIKE %s OR s.oracle_family_id LIKE %s OR s.oracle_student_id LIKE %s OR s.student_national_no LIKE %s OR s.student_mobile LIKE %s)';
-            $values = array_merge($values, array_fill(0, 6, $like));
+            $where[] = '(s.student_uid LIKE %s OR s.student_name LIKE %s OR s.oracle_family_id LIKE %s OR s.oracle_student_id LIKE %s OR s.student_national_no LIKE %s OR s.student_mobile LIKE %s OR s.mother_mobile LIKE %s)';
+            $values = array_merge($values, array_fill(0, 7, $like));
         }
         if ('' !== $filters['status']) {
             $where[] = 's.student_status = %s';
             $values[] = $filters['status'];
+        }
+        if ('' !== $filters['gender']) {
+            $where[] = 's.student_gender = %s';
+            $values[] = $filters['gender'];
         }
         foreach (array('study_year', 'class_id', 'section_id') as $field) {
             if ('' !== $filters[$field]) {
@@ -365,7 +369,7 @@ class Olama_Core_Admin {
         $limit = $this->directory_per_page();
         $offset = $this->directory_offset($limit);
         $rows = $wpdb->get_results($wpdb->prepare(
-            'SELECT s.*, y.study_year, y.class_id, y.class_name, y.section_id, y.section_name FROM `' . esc_sql($students) . '` s' . $join . $where_sql . ' ORDER BY s.id DESC LIMIT %d OFFSET %d',
+            'SELECT s.*, y.study_year, y.class_id, y.class_name, y.section_id, y.section_name, y.school_name FROM `' . esc_sql($students) . '` s' . $join . $where_sql . ' ORDER BY s.id DESC LIMIT %d OFFSET %d',
             array_merge($values, array($limit, $offset))
         ), ARRAY_A);
 
@@ -389,10 +393,10 @@ class Olama_Core_Admin {
             $this->table_cell($row, 'oracle_family_id');
             $this->table_cell($row, 'oracle_student_id');
             $this->table_cell($row, 'student_national_no');
-            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            echo '<td>' . esc_html($this->display_value($this->value($row, 'student_gender_name') ? $this->value($row, 'student_gender_name') : $this->value($row, 'student_gender'))) . '</td>';
             echo '<td>' . esc_html($this->display_value($this->value($row, 'class_name') ? $this->value($row, 'class_name') : $this->value($row, 'class_id'))) . '</td>';
             echo '<td>' . esc_html($this->display_value($this->value($row, 'section_name') ? $this->value($row, 'section_name') : $this->value($row, 'section_id'))) . '</td>';
-            echo '<td>' . $this->status_badge($this->value($row, 'student_status')) . '</td>';
+            echo '<td>' . $this->status_badge($this->value($row, 'student_status_name') ? $this->value($row, 'student_status_name') : $this->value($row, 'student_status')) . '</td>';
             $this->table_cell($row, 'study_year');
             echo '<td>' . esc_html($this->display_date($this->value($row, 'last_synced_at'), true)) . '</td>';
             echo '<td><div class="olama-actions olama-row-actions">';
@@ -420,8 +424,8 @@ class Olama_Core_Admin {
 
         if ('' !== $filters['s']) {
             $like = '%' . $wpdb->esc_like($filters['s']) . '%';
-            $where[] = '(y.student_uid LIKE %s OR s.student_name LIKE %s OR y.oracle_family_id LIKE %s OR y.oracle_student_id LIKE %s OR y.study_year LIKE %s)';
-            $values = array_merge($values, array_fill(0, 5, $like));
+            $where[] = '(y.student_uid LIKE %s OR s.student_name LIKE %s OR y.oracle_family_id LIKE %s OR y.oracle_student_id LIKE %s OR y.study_year LIKE %s OR y.school_name LIKE %s)';
+            $values = array_merge($values, array_fill(0, 6, $like));
         }
         foreach (array('study_year', 'class_id', 'section_id') as $field) {
             if ('' !== $filters[$field]) {
@@ -430,7 +434,7 @@ class Olama_Core_Admin {
             }
         }
         if ('' !== $filters['status']) {
-            $where[] = 'y.student_year_status = %s';
+            $where[] = 'y.student_status = %s';
             $values[] = $filters['status'];
         }
 
@@ -464,12 +468,12 @@ class Olama_Core_Admin {
             $this->table_cell($row, 'oracle_family_id');
             $this->table_cell($row, 'oracle_student_id');
             $this->table_cell($row, 'study_year');
-            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            $this->table_cell($row, 'school_name');
             echo '<td>' . esc_html($this->display_value($this->value($row, 'class_name') ? $this->value($row, 'class_name') : $this->value($row, 'class_id'))) . '</td>';
             echo '<td>' . esc_html($this->display_value($this->value($row, 'section_name') ? $this->value($row, 'section_name') : $this->value($row, 'section_id'))) . '</td>';
-            echo '<td>' . $this->status_badge($this->value($row, 'student_year_status')) . '</td>';
-            echo '<td>' . esc_html($this->display_value('')) . '</td>';
-            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            echo '<td>' . $this->status_badge($this->value($row, 'student_status_name') ? $this->value($row, 'student_status_name') : ($this->value($row, 'student_status') ? $this->value($row, 'student_status') : $this->value($row, 'student_year_status'))) . '</td>';
+            echo '<td>' . esc_html($this->display_date($this->value($row, 'registration_date'), false)) . '</td>';
+            echo '<td>' . esc_html($this->display_date($this->value($row, 'withdraw_date'), false)) . '</td>';
             echo '<td>' . esc_html($this->display_date($this->value($row, 'last_synced_at'), true)) . '</td>';
             echo '<td><div class="olama-actions olama-row-actions">';
             $this->render_row_link('بطاقة الطالب', $this->student_card_admin_url($family_id, $student_id, $study_year), $family_id && $student_id && $study_year);
@@ -514,7 +518,7 @@ class Olama_Core_Admin {
         echo '<p><label class="olama-label" for="olama_' . esc_attr($tab) . '_status">الحالة</label><input type="text" id="olama_' . esc_attr($tab) . '_status" name="status" class="regular-text" value="' . esc_attr($filters['status']) . '"></p>';
         if ($with_gender) {
             echo '<p><label class="olama-label" for="olama_students_gender">الجنس</label><select id="olama_students_gender" name="gender">';
-            foreach (array('' => 'الكل', 'male' => 'ذكر', 'female' => 'أنثى') as $value => $label) {
+            foreach (array('' => 'الكل', '1' => 'ذكر', '2' => 'أنثى') as $value => $label) {
                 echo '<option value="' . esc_attr($value) . '"' . selected($filters['gender'], $value, false) . '>' . esc_html($label) . '</option>';
             }
             echo '</select></p>';

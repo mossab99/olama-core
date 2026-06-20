@@ -34,7 +34,7 @@ class Olama_Core_Student_Service {
     }
 
     public function search($term, $args = array()) {
-        return $this->repo->search($this->table, array('student_uid', 'family_uid', 'oracle_family_id', 'oracle_student_id', 'student_name', 'student_national_no', 'student_mobile'), sanitize_text_field($term), $args);
+        return $this->repo->search($this->table, array('student_uid', 'family_uid', 'oracle_family_id', 'oracle_student_id', 'student_name', 'student_national_no', 'student_mobile', 'mother_mobile'), sanitize_text_field($term), $args);
     }
 
     public function upsert_from_source(array $data) {
@@ -78,15 +78,37 @@ class Olama_Core_Student_Service {
             'family_uid' => 'ORA-FAM-' . $family_id,
             'oracle_family_id' => $family_id,
             'oracle_student_id' => $student_id,
-            'student_name' => isset($data['student_name']) ? sanitize_text_field($data['student_name']) : '',
-            'student_national_no' => isset($data['student_national_no']) ? sanitize_text_field($data['student_national_no']) : null,
-            'student_mobile' => isset($data['student_mobile']) ? sanitize_text_field($data['student_mobile']) : null,
-            'student_status' => isset($data['student_status']) ? sanitize_text_field($data['student_status']) : null,
+            'student_name' => $this->text_any($data, array('student_name', 'name', 'full_name'), ''),
+            'student_national_no' => $this->text_any($data, array('student_national_no', 'national_no', 'national_number')),
+            'student_gender' => $this->text_any($data, array('student_gender', 'gender')),
+            'student_gender_name' => $this->text_any($data, array('student_gender_name', 'gender_name')),
+            'student_mobile' => $this->text_any($data, array('student_mobile', 'mobile')),
+            'mother_mobile' => $this->text_any($data, array('mother_mobile')),
+            'student_status' => $this->text_any($data, array('student_status', 'status')),
+            'student_status_name' => $this->text_any($data, array('student_status_name', 'status_name')),
             'source_system' => 'oracle',
-            'raw_json' => wp_json_encode(isset($data['raw']) ? $data['raw'] : $data),
+            'raw_json' => $this->raw_json($data),
         );
         $payload['source_hash'] = hash('sha256', wp_json_encode($payload));
 
         return $payload;
+    }
+
+    private function text_any($data, $keys, $default = null) {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                return sanitize_text_field((string) $data[$key]);
+            }
+        }
+
+        return $default;
+    }
+
+    private function raw_json($data) {
+        if (class_exists('Olama_Oracle_Settings') && Olama_Oracle_Settings::get('store_raw_payloads') !== 'yes') {
+            return null;
+        }
+
+        return wp_json_encode(isset($data['raw']) ? $data['raw'] : $data);
     }
 }

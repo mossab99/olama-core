@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Olama Core
  * Description: Clean Oracle-backed core family and student foundation for Olama plugins.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Author: Olama
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('OLAMA_CORE_VERSION', '0.1.0');
+define('OLAMA_CORE_VERSION', '0.1.1');
 define('OLAMA_CORE_FILE', __FILE__);
 define('OLAMA_CORE_PATH', plugin_dir_path(__FILE__));
 define('OLAMA_CORE_URL', plugin_dir_url(__FILE__));

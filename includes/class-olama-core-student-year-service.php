@@ -99,16 +99,51 @@ class Olama_Core_Student_Year_Service {
             'oracle_family_id' => $family_id,
             'oracle_student_id' => $student_id,
             'study_year' => $study_year,
-            'class_id' => isset($data['class_id']) ? sanitize_text_field($data['class_id']) : null,
-            'class_name' => isset($data['class_name']) ? sanitize_text_field($data['class_name']) : null,
-            'section_id' => isset($data['section_id']) ? sanitize_text_field($data['section_id']) : null,
-            'section_name' => isset($data['section_name']) ? sanitize_text_field($data['section_name']) : null,
-            'student_year_status' => isset($data['student_year_status']) ? sanitize_text_field($data['student_year_status']) : (isset($data['student_status']) ? sanitize_text_field($data['student_status']) : null),
+            'school_id' => $this->text_any($data, array('school_id')),
+            'school_name' => $this->text_any($data, array('school_name')),
+            'class_id' => $this->text_any($data, array('class_id')),
+            'class_name' => $this->text_any($data, array('class_name')),
+            'section_id' => $this->text_any($data, array('section_id')),
+            'section_name' => $this->text_any($data, array('section_name')),
+            'student_status' => $this->text_any($data, array('student_status', 'student_year_status', 'status')),
+            'student_status_name' => $this->text_any($data, array('student_status_name', 'student_year_status_name', 'status_name')),
+            'student_year_status' => $this->text_any($data, array('student_year_status', 'student_status', 'status')),
+            'registration_date' => $this->date_any($data, array('registration_date', 'register_date', 'date_registered')),
+            'withdraw_date' => $this->date_any($data, array('withdraw_date', 'withdrawal_date')),
             'source_system' => 'oracle',
-            'raw_json' => wp_json_encode(isset($data['raw']) ? $data['raw'] : $data),
+            'raw_json' => $this->raw_json($data),
         );
         $payload['source_hash'] = hash('sha256', wp_json_encode($payload));
 
         return $payload;
+    }
+
+    private function text_any($data, $keys, $default = null) {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                return sanitize_text_field((string) $data[$key]);
+            }
+        }
+
+        return $default;
+    }
+
+    private function date_any($data, $keys) {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                $timestamp = strtotime((string) $data[$key]);
+                return $timestamp ? gmdate('Y-m-d', $timestamp) : sanitize_text_field((string) $data[$key]);
+            }
+        }
+
+        return null;
+    }
+
+    private function raw_json($data) {
+        if (class_exists('Olama_Oracle_Settings') && Olama_Oracle_Settings::get('store_raw_payloads') !== 'yes') {
+            return null;
+        }
+
+        return wp_json_encode(isset($data['raw']) ? $data['raw'] : $data);
     }
 }

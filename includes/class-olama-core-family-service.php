@@ -22,7 +22,7 @@ class Olama_Core_Family_Service {
     }
 
     public function search($term, $args = array()) {
-        return $this->repo->search($this->table, array('family_uid', 'oracle_family_id', 'sponsor_full_name', 'father_mobile', 'mother_mobile', 'primary_mobile'), sanitize_text_field($term), $args);
+        return $this->repo->search($this->table, array('family_uid', 'oracle_family_id', 'sponsor_full_name', 'father_name', 'father_mobile', 'mother_mobile', 'primary_mobile', 'family_address', 'address', 'trans_region_name'), sanitize_text_field($term), $args);
     }
 
     public function get_students($family_uid) {
@@ -73,10 +73,15 @@ class Olama_Core_Family_Service {
             'mother_mobile' => $this->text($data, 'mother_mobile'),
             'primary_mobile' => $this->text($data, 'primary_mobile', $this->text($data, 'father_mobile')),
             'email' => isset($data['email']) ? sanitize_email($data['email']) : null,
-            'address' => isset($data['address']) ? sanitize_textarea_field($data['address']) : null,
-            'family_status' => $this->text($data, 'family_status'),
+            'address' => $this->textarea($data, array('address', 'family_address')),
+            'family_address' => $this->textarea($data, array('family_address', 'address')),
+            'trans_region_id' => $this->text_any($data, array('trans_region_id', 'transportation_region_id', 'region_id')),
+            'trans_region_name' => $this->text_any($data, array('trans_region_name', 'transportation_region_name', 'region_name', 'area_name')),
+            'family_status' => $this->text_any($data, array('family_status', 'status')),
+            'family_status_name' => $this->text_any($data, array('family_status_name', 'status_name')),
+            'students_count' => $this->int_any($data, array('students_count', 'student_count', 'children_count')),
             'source_system' => 'oracle',
-            'raw_json' => wp_json_encode(isset($data['raw']) ? $data['raw'] : $data),
+            'raw_json' => $this->raw_json($data),
         );
         $payload['source_hash'] = hash('sha256', wp_json_encode($payload));
 
@@ -85,5 +90,43 @@ class Olama_Core_Family_Service {
 
     private function text($data, $key, $default = null) {
         return isset($data[$key]) && $data[$key] !== '' ? sanitize_text_field((string) $data[$key]) : $default;
+    }
+
+    private function text_any($data, $keys, $default = null) {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                return sanitize_text_field((string) $data[$key]);
+            }
+        }
+
+        return $default;
+    }
+
+    private function textarea($data, $keys) {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                return sanitize_textarea_field((string) $data[$key]);
+            }
+        }
+
+        return null;
+    }
+
+    private function int_any($data, $keys) {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                return absint($data[$key]);
+            }
+        }
+
+        return null;
+    }
+
+    private function raw_json($data) {
+        if (class_exists('Olama_Oracle_Settings') && Olama_Oracle_Settings::get('store_raw_payloads') !== 'yes') {
+            return null;
+        }
+
+        return wp_json_encode(isset($data['raw']) ? $data['raw'] : $data);
     }
 }
