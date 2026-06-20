@@ -1,0 +1,524 @@
+.olama-core-admin {
+    --olama-bg: #f6f7fb;
+    --olama-surface: #ffffff;
+    --olama-primary: #0d1b2a;
+    --olama-primary-soft: #1e3a5f;
+    --olama-accent: #c8a951;
+    --olama-border: #e5e7eb;
+    --olama-text: #1f2937;
+    --olama-muted: #6b7280;
+    --olama-success: #15803d;
+    --olama-warning: #b45309;
+    --olama-danger: #b91c1c;
+    --olama-radius: 8px;
+    background: var(--olama-bg);
+    color: var(--olama-text);
+    margin-left: 0;
+    min-height: calc(100vh - 32px);
+    padding: 24px;
+}
+
+.olama-core-admin * {
+    box-sizing: border-box;
+}
+
+.olama-core-admin .olama-page {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+.olama-core-admin .olama-page-header {
+    align-items: flex-start;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 20px;
+    padding-bottom: 4px;
+}
+
+.olama-core-admin .olama-page-title {
+    color: var(--olama-primary);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 0;
+}
+
+.olama-core-admin .olama-page-subtitle {
+    color: var(--olama-muted);
+    font-size: 14px;
+    line-height: 1.8;
+    margin: 6px 0 0;
+    max-width: 760px;
+}
+
+.olama-core-admin .olama-toolbar,
+.olama-core-admin .olama-actions,
+.olama-core-admin .olama-section-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.olama-core-admin .olama-toolbar {
+    justify-content: space-between;
+    margin: 0 0 16px;
+}
+
+.olama-core-admin .olama-meta-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 14px;
+}
+
+.olama-core-admin .olama-meta-item {
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--olama-border);
+    border-radius: 999px;
+    color: var(--olama-muted);
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 700;
+    gap: 5px;
+    min-height: 30px;
+    padding: 6px 11px;
+}
+
+.olama-core-admin .olama-meta-item strong {
+    color: var(--olama-primary);
+}
+
+.olama-core-admin .olama-filter-card,
+.olama-core-admin .olama-card,
+.olama-core-admin .olama-section {
+    background: var(--olama-surface);
+    border: 1px solid var(--olama-border);
+    border-radius: var(--olama-radius);
+}
+
+.olama-core-admin .olama-filter-card {
+    margin: 0 0 18px;
+    padding: 18px;
+}
+
+.olama-core-admin .olama-filter-grid {
+    align-items: end;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+}
+
+.olama-core-admin .olama-filter-grid-4 {
+    grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 1fr) auto;
+}
+
+.olama-core-admin .olama-filter-grid p {
+    margin: 0;
+}
+
+.olama-core-admin .olama-filter-submit {
+    align-self: end;
+}
+
+.olama-core-admin input.regular-text {
+    border: 1px solid #d1d5db;
+    border-radius: 7px;
+    box-shadow: none;
+    color: var(--olama-text);
+    min-height: 40px;
+    padding: 7px 10px;
+    width: 100%;
+}
+
+.olama-core-admin input.regular-text:focus {
+    border-color: var(--olama-primary-soft);
+    box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.12);
+    outline: none;
+}
+
+.olama-core-admin .olama-grid,
+.olama-core-admin .olama-info-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.olama-core-admin .olama-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0 0 18px;
+}
+
+.olama-core-admin .olama-student-profile-grid {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.olama-core-admin .olama-kpi {
+    align-content: space-between;
+    min-height: 112px;
+    padding: 18px;
+}
+
+.olama-core-admin .olama-kpi-highlight {
+    border-color: rgba(200, 169, 81, 0.65);
+    box-shadow: inset -4px 0 0 var(--olama-accent);
+}
+
+.olama-core-admin .olama-kpi-label,
+.olama-core-admin .olama-label {
+    color: var(--olama-muted);
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.6;
+    margin: 0 0 5px;
+}
+
+.olama-core-admin .olama-kpi-value {
+    color: var(--olama-primary);
+    display: block;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.olama-core-admin .olama-section {
+    margin: 0 0 18px;
+    padding: 20px;
+}
+
+.olama-core-admin .olama-section-header {
+    align-items: center;
+    border-bottom: 1px solid var(--olama-border);
+    display: flex;
+    justify-content: space-between;
+    margin: -2px 0 14px;
+    padding-bottom: 12px;
+}
+
+.olama-core-admin .olama-section-title {
+    color: var(--olama-primary);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.olama-core-admin .olama-section-actions {
+    margin-top: 14px;
+}
+
+.olama-core-admin .olama-info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.olama-core-admin .olama-info-item {
+    background: #fbfcfe;
+    border: 1px solid var(--olama-border);
+    border-radius: 7px;
+    min-height: 76px;
+    padding: 12px;
+}
+
+.olama-core-admin .olama-info-item.is-wide {
+    grid-column: 1 / -1;
+}
+
+.olama-core-admin .olama-info-highlight {
+    border-color: rgba(200, 169, 81, 0.65);
+    box-shadow: inset -4px 0 0 var(--olama-accent);
+}
+
+.olama-core-admin .olama-value {
+    color: var(--olama-text);
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.olama-core-admin .is-number .olama-value,
+.olama-core-admin .olama-number,
+.olama-core-admin .olama-kpi-value {
+    direction: ltr;
+    text-align: left;
+}
+
+.olama-core-admin .olama-table-wrap {
+    border: 1px solid var(--olama-border);
+    border-radius: var(--olama-radius);
+    overflow-x: auto;
+}
+
+.olama-core-admin .olama-table {
+    background: var(--olama-surface);
+    border-collapse: collapse;
+    min-width: 980px;
+    width: 100%;
+}
+
+.olama-core-admin .olama-table th,
+.olama-core-admin .olama-table td {
+    border-bottom: 1px solid var(--olama-border);
+    padding: 11px 12px;
+    text-align: right;
+    vertical-align: middle;
+}
+
+.olama-core-admin .olama-table th {
+    background: #f9fafb;
+    color: var(--olama-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.olama-core-admin .olama-table td {
+    color: var(--olama-text);
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.olama-core-admin .olama-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.olama-core-admin .olama-badge {
+    align-items: center;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    color: var(--olama-muted);
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    min-height: 26px;
+    padding: 6px 10px;
+}
+
+.olama-core-admin .olama-badge-success {
+    background: #ecfdf3;
+    border-color: #bbf7d0;
+    color: var(--olama-success);
+}
+
+.olama-core-admin .olama-badge-warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: var(--olama-warning);
+}
+
+.olama-core-admin .olama-badge-danger {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: var(--olama-danger);
+}
+
+.olama-core-admin .olama-badge-neutral {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+
+.olama-core-admin .olama-btn,
+.olama-core-admin .button.olama-btn {
+    align-items: center;
+    border-radius: 7px;
+    border-style: solid;
+    border-width: 1px;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 700;
+    justify-content: center;
+    line-height: 1.2;
+    min-height: 38px;
+    padding: 9px 14px;
+    text-decoration: none;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.olama-core-admin .olama-btn-primary,
+.olama-core-admin .button.olama-btn-primary {
+    background: var(--olama-primary);
+    border-color: var(--olama-primary);
+    color: #fff;
+}
+
+.olama-core-admin .olama-btn-primary:hover,
+.olama-core-admin .button.olama-btn-primary:hover {
+    background: var(--olama-primary-soft);
+    border-color: var(--olama-primary-soft);
+    color: #fff;
+}
+
+.olama-core-admin .olama-btn-secondary {
+    background: #fff;
+    border-color: var(--olama-primary-soft);
+    color: var(--olama-primary-soft);
+}
+
+.olama-core-admin .olama-btn-ghost {
+    background: #fff;
+    border-color: var(--olama-border);
+    color: var(--olama-primary-soft);
+}
+
+.olama-core-admin .olama-btn-small {
+    font-size: 12px;
+    min-height: 30px;
+    padding: 7px 10px;
+}
+
+.olama-core-admin .olama-empty,
+.olama-core-admin .olama-family-360-empty,
+.olama-core-admin .olama-error,
+.olama-core-admin .olama-warning,
+.olama-core-admin .olama-loading,
+.olama-core-admin .olama-success {
+    border-radius: var(--olama-radius);
+    margin: 12px 0;
+    padding: 12px 14px;
+}
+
+.olama-core-admin .olama-empty,
+.olama-core-admin .olama-family-360-empty {
+    background: #fbfcfe;
+    border: 1px dashed #cbd5e1;
+    color: var(--olama-muted);
+}
+
+.olama-core-admin .olama-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: var(--olama-danger);
+}
+
+.olama-core-admin .olama-warning {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: var(--olama-warning);
+}
+
+.olama-core-admin .olama-loading {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: var(--olama-primary-soft);
+}
+
+.olama-core-admin .olama-success {
+    background: #ecfdf3;
+    border: 1px solid #bbf7d0;
+    color: var(--olama-success);
+}
+
+.olama-core-admin .olama-empty p,
+.olama-core-admin .olama-family-360-empty p,
+.olama-core-admin .olama-error p,
+.olama-core-admin .olama-warning p,
+.olama-core-admin .olama-loading p,
+.olama-core-admin .olama-success p {
+    margin: 0;
+}
+
+.olama-core-admin .olama-print-only {
+    display: none;
+}
+
+@media (max-width: 960px) {
+    .olama-core-admin {
+        padding: 18px;
+    }
+
+    .olama-core-admin .olama-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .olama-core-admin .olama-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .olama-core-admin .olama-filter-grid-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .olama-core-admin .olama-filter-submit {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 640px) {
+    .olama-core-admin {
+        margin-left: 0;
+        padding: 14px;
+    }
+
+    .olama-core-admin .olama-page-header,
+    .olama-core-admin .olama-toolbar {
+        display: block;
+    }
+
+    .olama-core-admin .olama-actions {
+        margin-top: 10px;
+    }
+
+    .olama-core-admin .olama-kpi-grid,
+    .olama-core-admin .olama-filter-grid,
+    .olama-core-admin .olama-info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media print {
+    #adminmenumain,
+    #wpadminbar,
+    #wpfooter,
+    #screen-meta-links,
+    .olama-core-admin .olama-no-print,
+    .olama-core-admin #olama-family-360-message,
+    .olama-core-admin #olama-family-profile-message,
+    .olama-core-admin #olama-family-card-message,
+    .olama-core-admin #olama-family-transportation-message,
+    .olama-core-admin #olama-student-card-message,
+    .olama-core-admin .olama-actions,
+    .olama-core-admin .olama-btn {
+        display: none !important;
+    }
+
+    #wpcontent,
+    #wpbody-content {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .olama-core-admin {
+        background: #fff;
+        margin: 0;
+        min-height: auto;
+        padding: 0;
+    }
+
+    .olama-core-admin .olama-page {
+        max-width: none;
+    }
+
+    .olama-core-admin .olama-section,
+    .olama-core-admin .olama-card,
+    .olama-core-admin .olama-info-item {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .olama-core-admin .olama-table-wrap {
+        overflow: visible;
+    }
+
+    .olama-core-admin .olama-print-only {
+        display: block;
+    }
+}
