@@ -24,15 +24,17 @@ class Olama_Core_Admin {
     public function register_menu() {
         add_menu_page('Olama Core', 'Olama Core', 'manage_options', 'olama-core', array($this, 'dashboard'), 'dashicons-database-view', 56);
         add_submenu_page('olama-core', 'لوحة التحكم', 'لوحة التحكم', 'manage_options', 'olama-core', array($this, 'dashboard'));
-        add_submenu_page('olama-core', 'العائلات', 'العائلات', 'manage_options', 'olama-core-families', array($this, 'families'));
-        add_submenu_page('olama-core', 'الطلاب', 'الطلاب', 'manage_options', 'olama-core-students', array($this, 'students'));
-        add_submenu_page('olama-core', 'سنوات الطلاب', 'سنوات الطلاب', 'manage_options', 'olama-core-student-years', array($this, 'student_years'));
+        add_submenu_page('olama-core', 'الدليل', 'الدليل', 'manage_options', 'olama-core-directory', array($this, 'directory'));
         add_submenu_page('olama-core', 'لوحة العائلة 360', 'لوحة العائلة 360', 'manage_options', 'olama-core-family-360', array($this, 'family_360'));
         add_submenu_page('olama-core', 'بطاقة العائلة', 'بطاقة العائلة', 'manage_options', 'olama-core-family-card', array($this, 'family_card'));
+        add_submenu_page('olama-core', 'بطاقة الطالب', 'بطاقة الطالب', 'manage_options', 'olama-core-student-card', array($this, 'student_card'));
         add_submenu_page('olama-core', 'البطاقة المالية', 'البطاقة المالية', 'manage_options', 'olama-core-family-financial-card', array($this, 'family_financial_card'));
         add_submenu_page('olama-core', 'بطاقة المواصلات', 'بطاقة المواصلات', 'manage_options', 'olama-core-family-transportation-card', array($this, 'family_transportation_card'));
-        add_submenu_page('olama-core', 'بطاقة الطالب', 'بطاقة الطالب', 'manage_options', 'olama-core-student-card', array($this, 'student_card'));
         add_submenu_page('olama-core', 'الصحة', 'الصحة', 'manage_options', 'olama-core-health', array($this, 'health'));
+
+        add_submenu_page(null, 'العائلات', 'العائلات', 'manage_options', 'olama-core-families', array($this, 'families'));
+        add_submenu_page(null, 'الطلاب', 'الطلاب', 'manage_options', 'olama-core-students', array($this, 'students'));
+        add_submenu_page(null, 'سنوات الطلاب', 'سنوات الطلاب', 'manage_options', 'olama-core-student-years', array($this, 'student_years'));
     }
 
     public function enqueue_admin_assets($hook_suffix) {
@@ -50,109 +52,613 @@ class Olama_Core_Admin {
     }
 
     public function dashboard() {
-        global $wpdb;
+        $counts = $this->directory_counts();
+        $last_sync = $this->last_sync_summary();
+        $incomplete = $this->local_data_looks_incomplete($counts);
+        $default_study_year = $this->oracle_default_study_year();
 
-        $families = $this->core->families()->count();
-        $students = $this->core->students()->count();
-        $years = $this->core->student_years()->count();
-        $family_table = $wpdb->prefix . 'olama_core_families';
-        $student_table = $wpdb->prefix . 'olama_core_students';
-        $last_family = $wpdb->get_row("SELECT * FROM `" . esc_sql($family_table) . "` ORDER BY last_synced_at DESC, id DESC LIMIT 1", ARRAY_A);
-        $last_student = $wpdb->get_row("SELECT * FROM `" . esc_sql($student_table) . "` ORDER BY last_synced_at DESC, id DESC LIMIT 1", ARRAY_A);
-        $recent = $wpdb->get_results("SELECT 'family' AS type, family_uid AS uid, sponsor_full_name AS label, last_synced_at FROM `" . esc_sql($family_table) . "` UNION ALL SELECT 'student' AS type, student_uid AS uid, student_name AS label, last_synced_at FROM `" . esc_sql($student_table) . "` ORDER BY last_synced_at DESC LIMIT 10", ARRAY_A);
+        echo '<div class="wrap olama-core-admin" dir="rtl"><div class="olama-page">';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">لوحة تحكم Olama Core</h1>';
+        echo '<p class="olama-page-subtitle">ملخص تشغيلي لبيانات العائلات والطلاب والمزامنة مع نظام Oracle ERP</p></div></header>';
 
-        echo '<div class="wrap"><h1>Olama Core</h1>';
-        echo '<div class="notice notice-warning inline"><p>Olama Core is currently isolated and is not yet used by existing Olama plugins.</p></div>';
-        $this->stat_cards(array(
-            'Core families' => $families,
-            'Core students' => $students,
-            'Student-year records' => $years,
-        ));
-        echo '<h2>Last Synced</h2><table class="widefat striped"><tbody>';
-        echo '<tr><th>Last synced family</th><td>' . esc_html($last_family ? $last_family['family_uid'] . ' - ' . $last_family['sponsor_full_name'] : 'None') . '</td></tr>';
-        echo '<tr><th>Last synced student</th><td>' . esc_html($last_student ? $last_student['student_uid'] . ' - ' . $last_student['student_name'] : 'None') . '</td></tr>';
-        echo '</tbody></table>';
-        echo '<h2>Recent Records</h2>';
-        $this->simple_table($recent, array('type' => 'Type', 'uid' => 'UID', 'label' => 'Name', 'last_synced_at' => 'Last Synced At'));
+        if ($incomplete) {
+            echo '<div class="olama-warning"><p>تنبيه: قائمة الطلاب أو سنوات الطلاب قد تكون غير مكتملة. يتم عرض السجلات المحلية المتزامنة فقط.</p></div>';
+        }
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">الملخص العام</h2></div>';
+        echo '<div class="olama-grid olama-kpi-grid">';
+        $this->render_kpi('عدد العائلات', $counts['families'], true);
+        $this->render_kpi('عدد الطلاب', $counts['students'], false);
+        $this->render_kpi('عدد سجلات السنوات الدراسية', $counts['student_years'], false);
+        $this->render_kpi('آخر مزامنة', $this->display_value($last_sync['latest']), false);
+        $this->render_kpi('العائلات النشطة', $counts['active_families'], false);
+        $this->render_kpi('الطلاب النشطون', $counts['active_students'], false);
+        $this->render_kpi('حالة البيانات', $incomplete ? 'تحتاج مراجعة' : 'طبيعية', $incomplete);
+        echo '</div></section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">البحث السريع</h2></div>';
+        echo '<form class="olama-filter-card olama-dashboard-search" method="get" action="' . esc_url(admin_url('admin.php')) . '">';
+        echo '<input type="hidden" name="page" value="olama-core-directory">';
+        echo '<div class="olama-filter-grid">';
+        echo '<p><label class="olama-label" for="olama_dashboard_s">بحث</label><input type="search" id="olama_dashboard_s" name="s" class="regular-text" value=""></p>';
+        echo '<p><label class="olama-label" for="olama_dashboard_type">نوع البحث</label><select id="olama_dashboard_type" name="quick_type">';
+        foreach (array('family_id' => 'رقم العائلة', 'student_id' => 'رقم الطالب', 'student_name' => 'اسم الطالب', 'guardian_name' => 'اسم ولي الأمر', 'mobile' => 'رقم الموبايل', 'national_no' => 'الرقم الوطني') as $value => $label) {
+            echo '<option value="' . esc_attr($value) . '">' . esc_html($label) . '</option>';
+        }
+        echo '</select></p>';
+        echo '<p class="olama-filter-submit"><button type="submit" class="olama-btn olama-btn-primary">بحث</button></p>';
+        echo '</div></form></section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">روابط تشغيلية</h2></div><div class="olama-actions">';
+        $this->render_action_link('فتح الدليل', $this->admin_page_url('olama-core-directory'), 'olama-btn-primary');
+        $this->render_action_link('لوحة العائلة 360', $this->family_360_admin_url('olama-core-family-360', 0, $default_study_year), 'olama-btn-secondary');
+        $this->render_action_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', 0, $default_study_year), 'olama-btn-ghost');
+        $this->render_action_link('بطاقة الطالب', $this->admin_page_url('olama-core-student-card', array('study_year' => $default_study_year)), 'olama-btn-ghost');
+        $this->render_action_link('المزامنة اليدوية', admin_url('admin.php?page=olama-oracle-sync'), 'olama-btn-ghost');
+        echo '</div></section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">حالة المزامنة</h2></div>';
+        echo '<div class="olama-info-grid">';
+        $this->render_info_item('آخر مزامنة للعائلات', $last_sync['families']);
+        $this->render_info_item('آخر مزامنة للطلاب', $last_sync['students']);
+        $this->render_info_item('آخر مزامنة لسنوات الطلاب', $last_sync['student_years']);
+        $this->render_info_item('عدد السجلات المحلية', sprintf('%s عائلة / %s طالب / %s سنة طالب', number_format_i18n($counts['families']), number_format_i18n($counts['students']), number_format_i18n($counts['student_years'])));
         echo '</div>';
+        if ($incomplete) {
+            echo '<div class="olama-warning"><p>تنبيه: هذه الصفحة تعرض البيانات المتزامنة محلياً فقط، وقد تكون قائمة الطلاب أو سنوات الطلاب غير مكتملة حتى تكتمل عملية المزامنة.</p></div>';
+        }
+        echo '</section>';
+        echo '</div></div>';
     }
 
     public function families() {
-        global $wpdb;
-
-        $table = $wpdb->prefix . 'olama_core_families';
-        $total = $this->core->families()->count();
-        $rows = $this->paged_rows($table, $total);
-        foreach ($rows as &$row) {
-            $row['students_count'] = $this->core->students()->count(array('family_uid' => $row['family_uid']));
-        }
-        unset($row);
-
-        echo '<div class="wrap"><h1>Core Families</h1>';
-        $this->pagination_controls('olama-core-families', $total);
-        $this->simple_table($rows, array(
-            'family_uid' => 'Family UID',
-            'oracle_family_id' => 'Oracle Family ID',
-            'sponsor_full_name' => 'Sponsor Full Name',
-            'father_mobile' => 'Father Mobile',
-            'mother_mobile' => 'Mother Mobile',
-            'students_count' => 'Students Count',
-            'family_status' => 'Family Status',
-            'last_synced_at' => 'Last Synced At',
-        ));
-        $this->pagination_controls('olama-core-families', $total);
-        echo '</div>';
+        $this->redirect_to_directory_tab('families');
     }
 
     public function students() {
-        global $wpdb;
-
-        $total = $this->core->students()->count();
-        $rows = $this->paged_rows($wpdb->prefix . 'olama_core_students', $total);
-        echo '<div class="wrap"><h1>Core Students</h1>';
-        $this->pagination_controls('olama-core-students', $total);
-        $this->simple_table($rows, array(
-            'student_uid' => 'Student UID',
-            'student_name' => 'Student Name',
-            'family_uid' => 'Family UID',
-            'oracle_family_id' => 'Oracle Family ID',
-            'oracle_student_id' => 'Oracle Student ID',
-            'student_status' => 'Student Status',
-            'last_synced_at' => 'Last Synced At',
-        ));
-        $this->pagination_controls('olama-core-students', $total);
-        echo '</div>';
+        $this->redirect_to_directory_tab('students');
     }
 
     public function student_years() {
+        $this->redirect_to_directory_tab('student_years');
+    }
+
+    public function directory() {
+        $tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : $this->quick_search_default_tab();
+        $valid_tabs = array('families', 'students', 'student_years');
+        if (!in_array($tab, $valid_tabs, true)) {
+            $tab = $this->quick_search_default_tab();
+        }
+
+        $counts = $this->directory_counts();
+
+        echo '<div class="wrap olama-core-admin" dir="rtl"><div class="olama-page">';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">الدليل</h1>';
+        echo '<p class="olama-page-subtitle">بحث واستعراض العائلات والطلاب وسنوات الطلاب من البيانات المحلية المتزامنة مع Oracle ERP</p></div></header>';
+
+        if ($this->local_data_looks_incomplete($counts)) {
+            echo '<div class="olama-warning"><p>تنبيه: هذه الصفحة تعرض البيانات المتزامنة محلياً فقط، وقد تكون قائمة الطلاب أو سنوات الطلاب غير مكتملة حتى تكتمل عملية المزامنة.</p></div>';
+        }
+
+        echo '<div class="olama-meta-row">';
+        echo '<span class="olama-meta-item">إجمالي العائلات: <strong>' . esc_html(number_format_i18n($counts['families'])) . '</strong></span>';
+        echo '<span class="olama-meta-item">إجمالي الطلاب: <strong>' . esc_html(number_format_i18n($counts['students'])) . '</strong></span>';
+        echo '<span class="olama-meta-item">إجمالي سنوات الطلاب: <strong>' . esc_html(number_format_i18n($counts['student_years'])) . '</strong></span>';
+        echo '</div>';
+
+        $this->render_directory_tabs($tab);
+
+        if ('students' === $tab) {
+            $this->render_students_directory_tab($counts);
+        } elseif ('student_years' === $tab) {
+            $this->render_student_years_directory_tab($counts);
+        } else {
+            $this->render_families_directory_tab();
+        }
+
+        echo '</div></div>';
+    }
+
+    private function redirect_to_directory_tab($tab) {
+        $args = array('page' => 'olama-core-directory', 'tab' => sanitize_key($tab));
+        foreach (array('s', 'status', 'study_year', 'class_id', 'section_id', 'gender', 'per_page', 'paged') as $key) {
+            if (isset($_GET[$key])) {
+                $args[$key] = sanitize_text_field(wp_unslash($_GET[$key]));
+            }
+        }
+
+        wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
+        exit;
+    }
+
+    private function quick_search_default_tab() {
+        $type = isset($_GET['quick_type']) ? sanitize_key(wp_unslash($_GET['quick_type'])) : '';
+        return in_array($type, array('student_id', 'student_name', 'national_no'), true) ? 'students' : 'families';
+    }
+
+    private function directory_counts() {
+        return array(
+            'families' => $this->safe_table_count('olama_core_families'),
+            'students' => $this->safe_table_count('olama_core_students'),
+            'student_years' => $this->safe_table_count('olama_core_student_years'),
+            'active_families' => $this->active_status_count('olama_core_families', 'family_status'),
+            'active_students' => $this->active_status_count('olama_core_students', 'student_status'),
+        );
+    }
+
+    private function safe_table_count($table_name) {
         global $wpdb;
+
+        $table = $wpdb->prefix . $table_name;
+        if (!Olama_Core_Migrator::table_exists($table)) {
+            return 0;
+        }
+
+        return (int) $wpdb->get_var('SELECT COUNT(*) FROM `' . esc_sql($table) . '`');
+    }
+
+    private function active_status_count($table_name, $status_column) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . $table_name;
+        if (!Olama_Core_Migrator::table_exists($table)) {
+            return 0;
+        }
+
+        return (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM `" . esc_sql($table) . "` WHERE LOWER(`" . esc_sql($status_column) . "`) IN ('active', 'enabled', 'current') OR `" . esc_sql($status_column) . "` IN ('فعال', 'نشط', 'مستمر')"
+        );
+    }
+
+    private function local_data_looks_incomplete($counts) {
+        return $counts['families'] >= 100 && ($counts['students'] < max(50, (int) floor($counts['families'] * 0.2)) || $counts['student_years'] < max(50, (int) floor($counts['families'] * 0.2)));
+    }
+
+    private function last_sync_summary() {
+        return array(
+            'families' => $this->last_sync_for_table('olama_core_families'),
+            'students' => $this->last_sync_for_table('olama_core_students'),
+            'student_years' => $this->last_sync_for_table('olama_core_student_years'),
+            'latest' => $this->latest_sync_time(),
+        );
+    }
+
+    private function last_sync_for_table($table_name) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . $table_name;
+        if (!Olama_Core_Migrator::table_exists($table)) {
+            return '';
+        }
+
+        return (string) $wpdb->get_var('SELECT MAX(last_synced_at) FROM `' . esc_sql($table) . '`');
+    }
+
+    private function latest_sync_time() {
+        $times = array_filter(array_values(array(
+            $this->last_sync_for_table('olama_core_families'),
+            $this->last_sync_for_table('olama_core_students'),
+            $this->last_sync_for_table('olama_core_student_years'),
+        )));
+
+        if (!$times) {
+            return '';
+        }
+
+        rsort($times);
+        return reset($times);
+    }
+
+    private function render_directory_tabs($active_tab) {
+        $tabs = array(
+            'families' => 'العائلات',
+            'students' => 'الطلاب',
+            'student_years' => 'سنوات الطلاب',
+        );
+
+        echo '<nav class="olama-tabs" aria-label="أقسام الدليل">';
+        foreach ($tabs as $tab => $label) {
+            $url = add_query_arg(array('page' => 'olama-core-directory', 'tab' => $tab), admin_url('admin.php'));
+            $class = 'olama-tab' . ($tab === $active_tab ? ' is-active' : '');
+            echo '<a class="' . esc_attr($class) . '" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
+        }
+        echo '</nav>';
+    }
+
+    private function render_families_directory_tab() {
+        global $wpdb;
+
+        $families = $wpdb->prefix . 'olama_core_families';
+        $students = $wpdb->prefix . 'olama_core_students';
+        $filters = $this->directory_filters();
+        $where = array();
+        $values = array();
+
+        if ('' !== $filters['s']) {
+            $like = '%' . $wpdb->esc_like($filters['s']) . '%';
+            $where[] = '(f.family_uid LIKE %s OR f.oracle_family_id LIKE %s OR f.sponsor_full_name LIKE %s OR f.father_name LIKE %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s OR f.primary_mobile LIKE %s OR f.address LIKE %s)';
+            $values = array_merge($values, array_fill(0, 8, $like));
+        }
+        if ('' !== $filters['status']) {
+            $where[] = 'f.family_status = %s';
+            $values[] = $filters['status'];
+        }
+
+        $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+        $total = (int) $wpdb->get_var($values ? $wpdb->prepare('SELECT COUNT(*) FROM `' . esc_sql($families) . '` f' . $where_sql, $values) : 'SELECT COUNT(*) FROM `' . esc_sql($families) . '` f');
+        $limit = $this->directory_per_page();
+        $offset = $this->directory_offset($limit);
+        $query_values = array_merge($values, array($limit, $offset));
+        $rows = $wpdb->get_results($wpdb->prepare(
+            'SELECT f.*, COUNT(s.id) AS students_count FROM `' . esc_sql($families) . '` f LEFT JOIN `' . esc_sql($students) . '` s ON s.family_uid = f.family_uid' . $where_sql . ' GROUP BY f.id ORDER BY f.id DESC LIMIT %d OFFSET %d',
+            $query_values
+        ), ARRAY_A);
+
+        $this->render_family_filters($filters);
+        $this->render_directory_pagination('families', $total, $limit);
+        echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr>';
+        foreach (array('Family UID', 'رقم العائلة', 'ولي الأمر / المعيل', 'اسم الأب', 'موبايل الأب', 'اسم الأم', 'موبايل الأم', 'المنطقة', 'عدد الطلاب', 'الحالة', 'آخر مزامنة', 'إجراءات') as $label) {
+            echo '<th>' . esc_html($label) . '</th>';
+        }
+        echo '</tr></thead><tbody>';
+        if (!$rows) {
+            echo '<tr><td colspan="12"><div class="olama-empty"><p>لا توجد سجلات مطابقة.</p></div></td></tr>';
+        }
+        foreach ($rows as $row) {
+            $family_id = $this->value($row, 'oracle_family_id');
+            $study_year = $this->oracle_default_study_year();
+            echo '<tr>';
+            $this->table_cell($row, 'family_uid');
+            $this->table_cell($row, 'oracle_family_id');
+            $this->table_cell($row, 'sponsor_full_name');
+            $this->table_cell($row, 'father_name');
+            $this->table_cell($row, 'father_mobile');
+            $this->table_cell($row, 'mother_name');
+            $this->table_cell($row, 'mother_mobile');
+            $this->table_cell($row, 'address');
+            echo '<td class="olama-number">' . esc_html(number_format_i18n((int) $row['students_count'])) . '</td>';
+            echo '<td>' . $this->status_badge($this->value($row, 'family_status')) . '</td>';
+            echo '<td>' . esc_html($this->display_date($this->value($row, 'last_synced_at'), true)) . '</td>';
+            echo '<td><div class="olama-actions olama-row-actions">';
+            $this->render_row_link('360', $this->family_360_admin_url('olama-core-family-360', $family_id, $study_year), $family_id);
+            $this->render_row_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', $family_id, $study_year), $family_id);
+            $this->render_row_link('المالية', $this->family_360_admin_url('olama-core-family-financial-card', $family_id, $study_year), $family_id);
+            $this->render_row_link('المواصلات', $this->family_360_admin_url('olama-core-family-transportation-card', $family_id, $study_year), $family_id);
+            echo '</div></td></tr>';
+        }
+        echo '</tbody></table></div>';
+        $this->render_directory_pagination('families', $total, $limit);
+    }
+
+    private function render_students_directory_tab($counts) {
+        global $wpdb;
+
+        if ($this->local_data_looks_incomplete($counts)) {
+            echo '<div class="olama-warning"><p>تنبيه: يتم عرض الطلاب المتزامنين محلياً فقط. إذا كان العدد أقل من المتوقع، يرجى تشغيل أو مراجعة المزامنة.</p></div>';
+        }
+
+        $students = $wpdb->prefix . 'olama_core_students';
+        $years = $wpdb->prefix . 'olama_core_student_years';
+        $filters = $this->directory_filters();
+        $where = array();
+        $values = array();
+
+        if ('' !== $filters['s']) {
+            $like = '%' . $wpdb->esc_like($filters['s']) . '%';
+            $where[] = '(s.student_uid LIKE %s OR s.student_name LIKE %s OR s.oracle_family_id LIKE %s OR s.oracle_student_id LIKE %s OR s.student_national_no LIKE %s OR s.student_mobile LIKE %s)';
+            $values = array_merge($values, array_fill(0, 6, $like));
+        }
+        if ('' !== $filters['status']) {
+            $where[] = 's.student_status = %s';
+            $values[] = $filters['status'];
+        }
+        foreach (array('study_year', 'class_id', 'section_id') as $field) {
+            if ('' !== $filters[$field]) {
+                $where[] = 'y.' . $field . ' = %s';
+                $values[] = $filters[$field];
+            }
+        }
+
+        $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+        $join = ' LEFT JOIN `' . esc_sql($years) . '` y ON y.id = (SELECT yy.id FROM `' . esc_sql($years) . '` yy WHERE yy.student_uid = s.student_uid ORDER BY yy.study_year DESC, yy.id DESC LIMIT 1)';
+        $total = (int) $wpdb->get_var($values ? $wpdb->prepare('SELECT COUNT(*) FROM `' . esc_sql($students) . '` s' . $join . $where_sql, $values) : 'SELECT COUNT(*) FROM `' . esc_sql($students) . '` s' . $join);
+        $limit = $this->directory_per_page();
+        $offset = $this->directory_offset($limit);
+        $rows = $wpdb->get_results($wpdb->prepare(
+            'SELECT s.*, y.study_year, y.class_id, y.class_name, y.section_id, y.section_name FROM `' . esc_sql($students) . '` s' . $join . $where_sql . ' ORDER BY s.id DESC LIMIT %d OFFSET %d',
+            array_merge($values, array($limit, $offset))
+        ), ARRAY_A);
+
+        $this->render_student_filters($filters, true);
+        $this->render_directory_pagination('students', $total, $limit);
+        echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr>';
+        foreach (array('Student UID', 'اسم الطالب', 'رقم العائلة', 'رقم الطالب', 'الرقم الوطني', 'الجنس', 'الصف', 'الشعبة', 'الحالة', 'السنة الدراسية', 'آخر مزامنة', 'إجراءات') as $label) {
+            echo '<th>' . esc_html($label) . '</th>';
+        }
+        echo '</tr></thead><tbody>';
+        if (!$rows) {
+            echo '<tr><td colspan="12"><div class="olama-empty"><p>لا توجد سجلات مطابقة.</p></div></td></tr>';
+        }
+        foreach ($rows as $row) {
+            $family_id = $this->value($row, 'oracle_family_id');
+            $student_id = $this->value($row, 'oracle_student_id');
+            $study_year = $this->value($row, 'study_year') ? $this->value($row, 'study_year') : $this->oracle_default_study_year();
+            echo '<tr>';
+            $this->table_cell($row, 'student_uid');
+            $this->table_cell($row, 'student_name');
+            $this->table_cell($row, 'oracle_family_id');
+            $this->table_cell($row, 'oracle_student_id');
+            $this->table_cell($row, 'student_national_no');
+            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            echo '<td>' . esc_html($this->display_value($this->value($row, 'class_name') ? $this->value($row, 'class_name') : $this->value($row, 'class_id'))) . '</td>';
+            echo '<td>' . esc_html($this->display_value($this->value($row, 'section_name') ? $this->value($row, 'section_name') : $this->value($row, 'section_id'))) . '</td>';
+            echo '<td>' . $this->status_badge($this->value($row, 'student_status')) . '</td>';
+            $this->table_cell($row, 'study_year');
+            echo '<td>' . esc_html($this->display_date($this->value($row, 'last_synced_at'), true)) . '</td>';
+            echo '<td><div class="olama-actions olama-row-actions">';
+            $this->render_row_link('بطاقة الطالب', $this->student_card_admin_url($family_id, $student_id, $study_year), $family_id && $student_id && $study_year);
+            $this->render_row_link('360', $this->family_360_admin_url('olama-core-family-360', $family_id, $study_year), $family_id && $study_year);
+            $this->render_row_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', $family_id, $study_year), $family_id && $study_year);
+            echo '</div></td></tr>';
+        }
+        echo '</tbody></table></div>';
+        $this->render_directory_pagination('students', $total, $limit);
+    }
+
+    private function render_student_years_directory_tab($counts) {
+        global $wpdb;
+
+        if ($this->local_data_looks_incomplete($counts)) {
+            echo '<div class="olama-warning"><p>تنبيه: يتم عرض سجلات السنوات الدراسية المتزامنة محلياً فقط. إذا كان العدد أقل من المتوقع، يرجى تشغيل أو مراجعة المزامنة.</p></div>';
+        }
 
         $years = $wpdb->prefix . 'olama_core_student_years';
         $students = $wpdb->prefix . 'olama_core_students';
-        $total = $this->core->student_years()->count();
-        $limit = $this->limit($total);
-        $offset = $this->offset($limit);
+        $filters = $this->directory_filters();
+        $where = array();
+        $values = array();
+
+        if ('' !== $filters['s']) {
+            $like = '%' . $wpdb->esc_like($filters['s']) . '%';
+            $where[] = '(y.student_uid LIKE %s OR s.student_name LIKE %s OR y.oracle_family_id LIKE %s OR y.oracle_student_id LIKE %s OR y.study_year LIKE %s)';
+            $values = array_merge($values, array_fill(0, 5, $like));
+        }
+        foreach (array('study_year', 'class_id', 'section_id') as $field) {
+            if ('' !== $filters[$field]) {
+                $where[] = 'y.' . $field . ' = %s';
+                $values[] = $filters[$field];
+            }
+        }
+        if ('' !== $filters['status']) {
+            $where[] = 'y.student_year_status = %s';
+            $values[] = $filters['status'];
+        }
+
+        $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+        $join = ' LEFT JOIN `' . esc_sql($students) . '` s ON y.student_uid = s.student_uid';
+        $total = (int) $wpdb->get_var($values ? $wpdb->prepare('SELECT COUNT(*) FROM `' . esc_sql($years) . '` y' . $join . $where_sql, $values) : 'SELECT COUNT(*) FROM `' . esc_sql($years) . '` y' . $join);
+        $limit = $this->directory_per_page();
+        $offset = $this->directory_offset($limit);
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT y.*, s.student_name FROM `" . esc_sql($years) . "` y LEFT JOIN `" . esc_sql($students) . "` s ON y.student_uid = s.student_uid ORDER BY y.id DESC LIMIT %d OFFSET %d",
-            $limit,
-            $offset
+            'SELECT y.*, s.student_name FROM `' . esc_sql($years) . '` y' . $join . $where_sql . ' ORDER BY y.id DESC LIMIT %d OFFSET %d',
+            array_merge($values, array($limit, $offset))
         ), ARRAY_A);
 
-        echo '<div class="wrap"><h1>Core Student Years</h1>';
-        $this->pagination_controls('olama-core-student-years', $total);
-        $this->simple_table($rows, array(
-            'student_uid' => 'Student UID',
-            'student_name' => 'Student Name',
-            'study_year' => 'Study Year',
-            'class_id' => 'Class ID',
-            'class_name' => 'Class Name',
-            'section_id' => 'Section ID',
-            'section_name' => 'Section Name',
-            'student_year_status' => 'Student Year Status',
-            'last_synced_at' => 'Last Synced At',
-        ));
-        $this->pagination_controls('olama-core-student-years', $total);
+        $this->render_student_filters($filters, false);
+        $this->render_directory_pagination('student_years', $total, $limit);
+        echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr>';
+        foreach (array('Student UID', 'اسم الطالب', 'رقم العائلة', 'رقم الطالب', 'السنة الدراسية', 'المدرسة', 'الصف', 'الشعبة', 'الحالة', 'تاريخ التسجيل', 'تاريخ الانسحاب', 'آخر مزامنة', 'إجراءات') as $label) {
+            echo '<th>' . esc_html($label) . '</th>';
+        }
+        echo '</tr></thead><tbody>';
+        if (!$rows) {
+            echo '<tr><td colspan="13"><div class="olama-empty"><p>لا توجد سجلات مطابقة.</p></div></td></tr>';
+        }
+        foreach ($rows as $row) {
+            $family_id = $this->value($row, 'oracle_family_id');
+            $student_id = $this->value($row, 'oracle_student_id');
+            $study_year = $this->value($row, 'study_year');
+            echo '<tr>';
+            $this->table_cell($row, 'student_uid');
+            $this->table_cell($row, 'student_name');
+            $this->table_cell($row, 'oracle_family_id');
+            $this->table_cell($row, 'oracle_student_id');
+            $this->table_cell($row, 'study_year');
+            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            echo '<td>' . esc_html($this->display_value($this->value($row, 'class_name') ? $this->value($row, 'class_name') : $this->value($row, 'class_id'))) . '</td>';
+            echo '<td>' . esc_html($this->display_value($this->value($row, 'section_name') ? $this->value($row, 'section_name') : $this->value($row, 'section_id'))) . '</td>';
+            echo '<td>' . $this->status_badge($this->value($row, 'student_year_status')) . '</td>';
+            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            echo '<td>' . esc_html($this->display_value('')) . '</td>';
+            echo '<td>' . esc_html($this->display_date($this->value($row, 'last_synced_at'), true)) . '</td>';
+            echo '<td><div class="olama-actions olama-row-actions">';
+            $this->render_row_link('بطاقة الطالب', $this->student_card_admin_url($family_id, $student_id, $study_year), $family_id && $student_id && $study_year);
+            $this->render_row_link('360', $this->family_360_admin_url('olama-core-family-360', $family_id, $study_year), $family_id && $study_year);
+            echo '</div></td></tr>';
+        }
+        echo '</tbody></table></div>';
+        $this->render_directory_pagination('student_years', $total, $limit);
+    }
+
+    private function directory_filters() {
+        return array(
+            's' => isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '',
+            'status' => isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '',
+            'study_year' => isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : '',
+            'class_id' => isset($_GET['class_id']) ? sanitize_text_field(wp_unslash($_GET['class_id'])) : '',
+            'section_id' => isset($_GET['section_id']) ? sanitize_text_field(wp_unslash($_GET['section_id'])) : '',
+            'gender' => isset($_GET['gender']) ? sanitize_text_field(wp_unslash($_GET['gender'])) : '',
+        );
+    }
+
+    private function render_family_filters($filters) {
+        echo '<form class="olama-filter-card" method="get" action="' . esc_url(admin_url('admin.php')) . '">';
+        echo '<input type="hidden" name="page" value="olama-core-directory"><input type="hidden" name="tab" value="families">';
+        echo '<div class="olama-filter-grid olama-filter-grid-4">';
+        echo '<p><label class="olama-label" for="olama_family_s">بحث عام</label><input type="search" id="olama_family_s" name="s" class="regular-text" value="' . esc_attr($filters['s']) . '"></p>';
+        echo '<p><label class="olama-label" for="olama_family_status">الحالة</label><input type="text" id="olama_family_status" name="status" class="regular-text" value="' . esc_attr($filters['status']) . '"></p>';
+        $this->render_per_page_select();
+        echo '<p class="olama-filter-submit"><button type="submit" class="olama-btn olama-btn-primary">تطبيق</button></p>';
+        echo '</div></form>';
+    }
+
+    private function render_student_filters($filters, $with_gender) {
+        $tab = $with_gender ? 'students' : 'student_years';
+        echo '<form class="olama-filter-card" method="get" action="' . esc_url(admin_url('admin.php')) . '">';
+        echo '<input type="hidden" name="page" value="olama-core-directory"><input type="hidden" name="tab" value="' . esc_attr($tab) . '">';
+        echo '<div class="olama-filter-grid olama-directory-filter-grid">';
+        echo '<p><label class="olama-label" for="olama_' . esc_attr($tab) . '_s">بحث عام</label><input type="search" id="olama_' . esc_attr($tab) . '_s" name="s" class="regular-text" value="' . esc_attr($filters['s']) . '"></p>';
+        echo '<p><label class="olama-label" for="olama_' . esc_attr($tab) . '_year">السنة الدراسية</label><input type="text" id="olama_' . esc_attr($tab) . '_year" name="study_year" class="regular-text" value="' . esc_attr($filters['study_year']) . '"></p>';
+        echo '<p><label class="olama-label" for="olama_' . esc_attr($tab) . '_class">الصف</label><input type="text" id="olama_' . esc_attr($tab) . '_class" name="class_id" class="regular-text" value="' . esc_attr($filters['class_id']) . '"></p>';
+        echo '<p><label class="olama-label" for="olama_' . esc_attr($tab) . '_section">الشعبة</label><input type="text" id="olama_' . esc_attr($tab) . '_section" name="section_id" class="regular-text" value="' . esc_attr($filters['section_id']) . '"></p>';
+        echo '<p><label class="olama-label" for="olama_' . esc_attr($tab) . '_status">الحالة</label><input type="text" id="olama_' . esc_attr($tab) . '_status" name="status" class="regular-text" value="' . esc_attr($filters['status']) . '"></p>';
+        if ($with_gender) {
+            echo '<p><label class="olama-label" for="olama_students_gender">الجنس</label><select id="olama_students_gender" name="gender">';
+            foreach (array('' => 'الكل', 'male' => 'ذكر', 'female' => 'أنثى') as $value => $label) {
+                echo '<option value="' . esc_attr($value) . '"' . selected($filters['gender'], $value, false) . '>' . esc_html($label) . '</option>';
+            }
+            echo '</select></p>';
+        }
+        $this->render_per_page_select();
+        echo '<p class="olama-filter-submit"><button type="submit" class="olama-btn olama-btn-primary">تطبيق</button></p>';
+        echo '</div></form>';
+    }
+
+    private function render_per_page_select() {
+        echo '<p><label class="olama-label" for="olama_per_page">عدد الصفوف</label><select id="olama_per_page" name="per_page">';
+        foreach (array(25, 50, 100, 200) as $option) {
+            echo '<option value="' . esc_attr($option) . '"' . selected($this->directory_per_page(), $option, false) . '>' . esc_html($option) . '</option>';
+        }
+        echo '</select></p>';
+    }
+
+    private function render_directory_pagination($tab, $total, $limit) {
+        $total = max(0, (int) $total);
+        $limit = max(1, (int) $limit);
+        $current = $this->current_page();
+        $total_pages = max(1, (int) ceil($total / $limit));
+        $current = min($current, $total_pages);
+
+        echo '<div class="olama-pagination">';
+        echo '<span class="olama-pagination-summary">' . esc_html(number_format_i18n($total)) . ' سجل، الصفحة ' . esc_html(number_format_i18n($current)) . ' من ' . esc_html(number_format_i18n($total_pages)) . '، عدد الصفوف ' . esc_html(number_format_i18n($limit)) . '</span>';
+        echo '<div class="olama-pagination-links">';
+        $this->render_page_button($tab, max(1, $current - 1), 'السابق', $current <= 1);
+        $this->render_page_button($tab, min($total_pages, $current + 1), 'التالي', $current >= $total_pages);
+        echo '</div></div>';
+    }
+
+    private function render_page_button($tab, $paged, $label, $disabled) {
+        if ($disabled) {
+            echo '<span class="olama-btn olama-btn-ghost olama-btn-small is-disabled">' . esc_html($label) . '</span>';
+            return;
+        }
+
+        $args = array(
+            'page' => 'olama-core-directory',
+            'tab' => $tab,
+            'paged' => max(1, absint($paged)),
+            'per_page' => $this->directory_per_page(),
+        );
+        foreach ($this->directory_filters() as $key => $value) {
+            if ('' !== $value) {
+                $args[$key] = $value;
+            }
+        }
+
+        echo '<a class="olama-btn olama-btn-ghost olama-btn-small" href="' . esc_url(add_query_arg($args, admin_url('admin.php'))) . '">' . esc_html($label) . '</a>';
+    }
+
+    private function directory_per_page() {
+        $value = isset($_GET['per_page']) ? absint($_GET['per_page']) : 50;
+        return in_array($value, array(25, 50, 100, 200), true) ? $value : 50;
+    }
+
+    private function directory_offset($limit) {
+        return (max(1, $this->current_page()) - 1) * max(1, (int) $limit);
+    }
+
+    private function render_kpi($label, $value, $highlight = false) {
+        echo '<div class="olama-card olama-kpi' . ($highlight ? ' olama-kpi-highlight' : '') . '">';
+        echo '<span class="olama-kpi-label">' . esc_html($label) . '</span>';
+        echo '<span class="olama-kpi-value">' . esc_html(is_numeric($value) ? number_format_i18n((int) $value) : $value) . '</span>';
         echo '</div>';
+    }
+
+    private function render_info_item($label, $value) {
+        echo '<div class="olama-info-item"><span class="olama-label">' . esc_html($label) . '</span><span class="olama-value">' . esc_html($this->display_value($this->display_date($value, true))) . '</span></div>';
+    }
+
+    private function render_action_link($label, $url, $class) {
+        echo '<a class="olama-btn ' . esc_attr($class) . '" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
+    }
+
+    private function render_row_link($label, $url, $enabled) {
+        if (!$enabled) {
+            echo '<span class="olama-btn olama-btn-ghost olama-btn-small is-disabled">' . esc_html($label) . '</span>';
+            return;
+        }
+
+        echo '<a class="olama-btn olama-btn-ghost olama-btn-small" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
+    }
+
+    private function admin_page_url($page, $args = array()) {
+        return add_query_arg(array_merge(array('page' => sanitize_key($page)), $args), admin_url('admin.php'));
+    }
+
+    private function student_card_admin_url($family_id, $student_id, $study_year) {
+        return add_query_arg(array(
+            'page' => 'olama-core-student-card',
+            'family_id' => sanitize_text_field((string) $family_id),
+            'student_id' => sanitize_text_field((string) $student_id),
+            'study_year' => sanitize_text_field((string) $study_year),
+        ), admin_url('admin.php'));
+    }
+
+    private function table_cell($row, $key) {
+        echo '<td>' . esc_html($this->display_value($this->value($row, $key))) . '</td>';
+    }
+
+    private function value($row, $key) {
+        return isset($row[$key]) ? $row[$key] : '';
+    }
+
+    private function display_value($value) {
+        if (null === $value || '' === $value) {
+            return '—';
+        }
+
+        return (string) $value;
+    }
+
+    private function display_date($value, $with_time = false) {
+        if (null === $value || '' === $value || '0000-00-00 00:00:00' === $value) {
+            return '';
+        }
+
+        $timestamp = strtotime((string) $value);
+        if (!$timestamp) {
+            return (string) $value;
+        }
+
+        return $with_time ? date_i18n('Y-m-d H:i', $timestamp) : date_i18n('Y-m-d', $timestamp);
+    }
+
+    private function status_badge($status) {
+        if (null === $status || '' === $status) {
+            return '<span class="olama-badge olama-badge-neutral">—</span>';
+        }
+
+        $normalized = strtolower((string) $status);
+        $class = 'olama-badge-neutral';
+        if (in_array($normalized, array('active', 'enabled', 'current'), true) || in_array($status, array('فعال', 'نشط', 'مستمر'), true)) {
+            $class = 'olama-badge-success';
+        } elseif (in_array($normalized, array('inactive', 'disabled', 'withdrawn', 'stopped'), true) || in_array($status, array('غير فعال', 'منسحب', 'متوقف'), true)) {
+            $class = 'olama-badge-danger';
+        } elseif (in_array($normalized, array('pending', 'waiting'), true) || in_array($status, array('قيد الانتظار', 'معلق'), true)) {
+            $class = 'olama-badge-warning';
+        }
+
+        return '<span class="olama-badge ' . esc_attr($class) . '">' . esc_html($status) . '</span>';
     }
 
     public function family_360() {
