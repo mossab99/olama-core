@@ -244,6 +244,54 @@
     margin: 0;
 }
 
+.olama-core-admin .olama-info-notice {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    color: #1e3a5f;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+}
+
+.olama-core-admin .olama-info-notice p {
+    margin: 5px 0 0;
+}
+
+.olama-core-admin .olama-permission-group {
+    border-top: 1px solid var(--olama-border);
+    padding: 16px 0;
+}
+
+.olama-core-admin .olama-permission-group:first-of-type {
+    border-top: 0;
+}
+
+.olama-core-admin .olama-permission-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.olama-core-admin .olama-permission-row {
+    align-items: center;
+    background: #fbfcfe;
+    border: 1px solid var(--olama-border);
+    border-radius: 7px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) minmax(360px, 2fr);
+    padding: 12px;
+}
+
+.olama-core-admin .olama-permission-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+}
+
+.olama-core-admin .olama-permission-roles label {
+    white-space: nowrap;
+}
+
 .olama-core-admin .olama-section-actions {
     margin-top: 14px;
 }

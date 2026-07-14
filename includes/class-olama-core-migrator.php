@@ -19,6 +19,8 @@ class Olama_Core_Migrator {
         $families = $wpdb->prefix . 'olama_core_families';
         $students = $wpdb->prefix . 'olama_core_students';
         $student_years = $wpdb->prefix . 'olama_core_student_years';
+        $staff_profiles = $wpdb->prefix . 'olama_core_staff_profiles';
+        $audit_logs = $wpdb->prefix . 'olama_logs';
 
         dbDelta("CREATE TABLE {$families} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -115,6 +117,39 @@ class Olama_Core_Migrator {
             KEY idx_oracle_student (oracle_student_id),
             KEY idx_student_status (student_status)
         ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$staff_profiles} (
+            user_id BIGINT UNSIGNED NOT NULL,
+            employee_id VARCHAR(50) NULL,
+            phone_number VARCHAR(30) NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (user_id),
+            KEY idx_employee_id (employee_id)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$audit_logs} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            source VARCHAR(50) NOT NULL DEFAULT 'school',
+            action VARCHAR(255) NOT NULL,
+            details TEXT NULL,
+            ip_address VARCHAR(45) NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            KEY user_id (user_id),
+            KEY source (source),
+            KEY created_at (created_at)
+        ) {$charset_collate};");
+
+        $legacy_teachers = $wpdb->prefix . 'olama_teachers';
+        if (self::table_exists($legacy_teachers)) {
+            $wpdb->query(
+                "INSERT INTO `" . esc_sql($staff_profiles) . "` (user_id, employee_id, phone_number, created_at, updated_at)
+                 SELECT id, employee_id, phone_number, NOW(), NOW() FROM `" . esc_sql($legacy_teachers) . "`
+                 ON DUPLICATE KEY UPDATE employee_id = VALUES(employee_id), phone_number = VALUES(phone_number)"
+            );
+        }
     }
 
     public static function required_tables() {
@@ -124,6 +159,8 @@ class Olama_Core_Migrator {
             $wpdb->prefix . 'olama_core_families',
             $wpdb->prefix . 'olama_core_students',
             $wpdb->prefix . 'olama_core_student_years',
+            $wpdb->prefix . 'olama_core_staff_profiles',
+            $wpdb->prefix . 'olama_logs',
         );
     }
 

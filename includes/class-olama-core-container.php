@@ -9,7 +9,9 @@ class Olama_Core_Container {
     private $families;
     private $students;
     private $student_years;
+    private $staff;
     private $admin;
+    private $users_admin;
     private $admin_initialized = false;
 
     public static function instance() {
@@ -26,10 +28,14 @@ class Olama_Core_Container {
             update_option('olama_core_db_version', OLAMA_CORE_VERSION);
         }
 
+        add_action('init', array('Olama_Core_Permissions', 'init'));
+
         if (is_admin() && !$this->admin_initialized) {
             $this->admin_initialized = true;
             $this->admin = new Olama_Core_Admin($this);
             $this->admin->init();
+            $this->users_admin = new Olama_Core_Users_Admin($this);
+            $this->users_admin->init();
         }
     }
 
@@ -55,5 +61,13 @@ class Olama_Core_Container {
         }
 
         return $this->student_years;
+    }
+
+    public function staff() {
+        if (!$this->staff) {
+            $this->staff = new Olama_Core_Staff_Service(new Olama_Core_Repository());
+        }
+
+        return $this->staff;
     }
 }

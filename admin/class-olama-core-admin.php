@@ -22,7 +22,7 @@ class Olama_Core_Admin {
     }
 
     public function register_menu() {
-        add_menu_page('Olama Core', 'Olama Core', 'manage_options', 'olama-core', array($this, 'dashboard'), 'dashicons-database-view', 56);
+        add_menu_page('Olama Core', 'Olama Core', 'olama_access_users_mgmt', 'olama-core', array($this, 'dashboard'), 'dashicons-database-view', 56);
         add_submenu_page('olama-core', 'لوحة التحكم', 'لوحة التحكم', 'manage_options', 'olama-core', array($this, 'dashboard'));
         add_submenu_page('olama-core', 'الدليل', 'الدليل', 'manage_options', 'olama-core-directory', array($this, 'directory'));
         add_submenu_page('olama-core', 'لوحة العائلة 360', 'لوحة العائلة 360', 'manage_options', 'olama-core-family-360', array($this, 'family_360'));
@@ -52,6 +52,11 @@ class Olama_Core_Admin {
     }
 
     public function dashboard() {
+        if (!current_user_can('manage_options')) {
+            wp_safe_redirect(admin_url('admin.php?page=olama-core-users'));
+            exit;
+        }
+
         $counts = $this->directory_counts();
         $last_sync = $this->last_sync_summary();
         $incomplete = $this->local_data_looks_incomplete($counts);

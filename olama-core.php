@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Olama Core
  * Description: Clean Oracle-backed core family and student foundation for Olama plugins.
- * Version: 0.1.1
+ * Version: 0.2.1
  * Author: Olama
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('OLAMA_CORE_VERSION', '0.1.1');
+define('OLAMA_CORE_VERSION', '0.2.1');
 define('OLAMA_CORE_FILE', __FILE__);
 define('OLAMA_CORE_PATH', plugin_dir_path(__FILE__));
 define('OLAMA_CORE_URL', plugin_dir_url(__FILE__));
@@ -20,12 +20,68 @@ require_once OLAMA_CORE_PATH . 'includes/class-olama-core-repository.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-family-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-student-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-student-year-service.php';
+require_once OLAMA_CORE_PATH . 'includes/class-olama-core-staff-service.php';
+require_once OLAMA_CORE_PATH . 'includes/class-olama-core-permissions.php';
+require_once OLAMA_CORE_PATH . 'includes/class-olama-core-logger.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-container.php';
 require_once OLAMA_CORE_PATH . 'admin/class-olama-core-admin.php';
+require_once OLAMA_CORE_PATH . 'admin/class-olama-core-users-admin.php';
 
 function olama_core() {
     return Olama_Core_Container::instance();
 }
+
+/**
+ * Register Olama Core in the Olama Hub module registry.
+ */
+function olama_core_register_hub_card($cards) {
+    foreach ($cards as $card) {
+        if (($card['id'] ?? '') === 'olama-core') {
+            return $cards;
+        }
+    }
+
+    $cards[] = array(
+        'id' => 'olama-core',
+        'label' => __('Olama Core', 'olama-core'),
+        'description' => __('Shared family, student, enrollment, staff, and permissions foundation.', 'olama-core'),
+        'icon' => 'dashicons-database-view',
+        'accent' => '#0f766e',
+        'accent_rgb' => '15,118,110',
+        'active' => true,
+        'capability' => 'olama_access_users_mgmt',
+        'primary_url' => admin_url('admin.php?page=olama-core'),
+        'submenus' => array(
+            array(
+                'id' => 'core.dashboard',
+                'label' => __('Dashboard', 'olama-core'),
+                'icon' => 'dashicons-dashboard',
+                'url' => admin_url('admin.php?page=olama-core'),
+                'capability' => 'olama_access_users_mgmt',
+                'color' => '#0f766e',
+            ),
+            array(
+                'id' => 'core.directory',
+                'label' => __('Directory', 'olama-core'),
+                'icon' => 'dashicons-search',
+                'url' => admin_url('admin.php?page=olama-core-directory'),
+                'capability' => 'manage_options',
+                'color' => '#0f766e',
+            ),
+            array(
+                'id' => 'core.users',
+                'label' => __('Users & Permissions', 'olama-core'),
+                'icon' => 'dashicons-groups',
+                'url' => admin_url('admin.php?page=olama-core-users'),
+                'capability' => 'olama_access_users_mgmt',
+                'color' => '#0f766e',
+            ),
+        ),
+    );
+
+    return $cards;
+}
+add_filter('olama_dashboard_cards', 'olama_core_register_hub_card', 20);
 
 register_activation_hook(__FILE__, array('Olama_Core_Migrator', 'activate'));
 
