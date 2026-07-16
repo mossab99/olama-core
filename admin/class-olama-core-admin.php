@@ -47,7 +47,7 @@ class Olama_Core_Admin {
             'olama-core-admin',
             OLAMA_CORE_URL . 'admin/css/olama-core-admin.css',
             array(),
-            OLAMA_CORE_VERSION
+            (string) filemtime(OLAMA_CORE_PATH . 'admin/css/olama-core-admin.css')
         );
     }
 
@@ -280,13 +280,14 @@ class Olama_Core_Admin {
         $values = array();
 
         if ('' !== $filters['s']) {
-            $like = '%' . $wpdb->esc_like($filters['s']) . '%';
-            $where[] = '(f.family_uid LIKE %s OR f.oracle_family_id LIKE %s OR f.sponsor_full_name LIKE %s OR f.father_name LIKE %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s OR f.primary_mobile LIKE %s OR f.address LIKE %s OR f.family_address LIKE %s OR f.trans_region_name LIKE %s)';
-            $values = array_merge($values, array_fill(0, 10, $like));
-        }
-        if ('' !== $filters['status']) {
-            $where[] = 'f.family_status = %s';
-            $values[] = $filters['status'];
+            if (ctype_digit($filters['s'])) {
+                $where[] = 'f.oracle_family_id = %s';
+                $values[] = $filters['s'];
+            } else {
+                $like = '%' . $wpdb->esc_like($filters['s']) . '%';
+                $where[] = '(f.sponsor_full_name LIKE %s OR f.father_name LIKE %s OR f.mother_name LIKE %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s OR f.primary_mobile LIKE %s)';
+                $values = array_merge($values, array_fill(0, 6, $like));
+            }
         }
 
         $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
@@ -504,8 +505,7 @@ class Olama_Core_Admin {
         echo '<form class="olama-filter-card" method="get" action="' . esc_url(admin_url('admin.php')) . '">';
         echo '<input type="hidden" name="page" value="olama-core-directory"><input type="hidden" name="tab" value="families">';
         echo '<div class="olama-filter-grid olama-filter-grid-4">';
-        echo '<p><label class="olama-label" for="olama_family_s">بحث عام</label><input type="search" id="olama_family_s" name="s" class="regular-text" value="' . esc_attr($filters['s']) . '"></p>';
-        echo '<p><label class="olama-label" for="olama_family_status">الحالة</label><input type="text" id="olama_family_status" name="status" class="regular-text" value="' . esc_attr($filters['status']) . '"></p>';
+        echo '<p><label class="olama-label" for="olama_family_s">رقم العائلة أو اسم/هاتف ولي الأمر</label><input type="search" id="olama_family_s" name="s" class="regular-text" value="' . esc_attr($filters['s']) . '" placeholder="مثال: 459"></p>';
         $this->render_per_page_select();
         echo '<p class="olama-filter-submit"><button type="submit" class="olama-btn olama-btn-primary">تطبيق</button></p>';
         echo '</div></form>';
@@ -670,17 +670,30 @@ class Olama_Core_Admin {
         return '<span class="olama-badge ' . esc_attr($class) . '">' . esc_html($status) . '</span>';
     }
 
+    private function refresh_family_if_requested($family_id, $study_year) {
+        $refresh = isset($_POST['refresh']) && '1' === sanitize_text_field(wp_unslash($_POST['refresh']));
+        if (!$refresh) {
+            return null;
+        }
+
+        if (!function_exists('olama_oracle_sync_refresh_family')) {
+            return array('success' => false, 'message' => 'مزامنة Oracle غير متاحة حالياً؛ يتم عرض آخر نسخة محفوظة في Olama Core.');
+        }
+
+        return olama_oracle_sync_refresh_family($family_id, $study_year);
+    }
+
     public function family_360() {
         $default_study_year = $this->oracle_default_study_year();
         $family_id = isset($_GET['family_id']) ? absint($_GET['family_id']) : 0;
         $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $default_study_year;
         $nonce = wp_create_nonce('olama_core_family_360');
-        $oracle_available = function_exists('olama_oracle_sync_api_get');
+        $oracle_available = true;
 
         echo '<div class="wrap olama-core-admin olama-family-360-admin" dir="rtl"><div class="olama-page">';
         echo '<header class="olama-page-header">';
         echo '<div><h1 class="olama-page-title">لوحة العائلة 360</h1>';
-        echo '<p class="olama-page-subtitle">عرض شامل لبيانات العائلة والطلاب والملف المالي والمواصلات من نظام Oracle ERP</p></div>';
+        echo '<p class="olama-page-subtitle">عرض شامل من النسخة المحلية المعتمدة في Olama Core مع بيان آخر مزامنة</p></div>';
         echo '</header>';
 
         if (!$oracle_available) {
@@ -692,6 +705,7 @@ class Olama_Core_Admin {
         echo '<div class="olama-filter-grid">';
         echo '<p><label class="olama-label" for="olama_family_360_family_id">رقم العائلة</label><input type="number" min="1" step="1" id="olama_family_360_family_id" class="regular-text" value="' . esc_attr($family_id ? $family_id : '') . '" required></p>';
         echo '<p><label class="olama-label" for="olama_family_360_study_year">السنة الدراسية</label><input type="text" id="olama_family_360_study_year" class="regular-text" value="' . esc_attr($study_year) . '" placeholder="2026-2027"></p>';
+        echo '<p><label class="olama-label" for="olama_family_360_source_mode">مصدر العرض</label><select id="olama_family_360_source_mode"><option value="local">النسخة المحفوظة</option><option value="refresh">تحديث من Oracle ثم العرض</option></select></p>';
         echo '<p class="olama-filter-submit">';
         submit_button('تحميل البيانات', 'primary olama-btn olama-btn-primary', 'submit', false, $oracle_available ? array() : array('disabled' => 'disabled'));
         echo '</p></div></form>';
@@ -714,10 +728,6 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'), 403);
         }
 
-        if (!function_exists('olama_oracle_sync_api_get')) {
-            wp_send_json_error(array('message' => 'Olama Oracle Sync is required to load Family 360 data. Please activate and configure it first.'), 400);
-        }
-
         $family_id = isset($_POST['family_id']) ? absint($_POST['family_id']) : 0;
         $study_year = isset($_POST['study_year']) ? sanitize_text_field(wp_unslash($_POST['study_year'])) : '';
 
@@ -725,8 +735,27 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'أدخل رقم عائلة صحيح.'), 400);
         }
 
+        $refresh_result = $this->refresh_family_if_requested($family_id, $study_year);
+        $data = $this->core->knowledge()->get_family_360($family_id, $study_year);
+        if (empty($data['family'])) {
+            wp_send_json_error(array('message' => 'لا توجد بيانات محفوظة لهذه العائلة. شغّل مزامنة Oracle لهذه العائلة أولاً.'), 404);
+        }
+
+        $financial_data = !empty($data['financial']) ? $data['financial'] : null;
+        $transportation_data = !empty($data['transportation']) ? array('transportation' => $data['transportation']) : null;
+        wp_send_json_success(array(
+            'html' => $this->render_family_360_dashboard($family_id, $study_year, $data, $financial_data, $transportation_data),
+            'source' => 'olama_core',
+            'refresh' => $refresh_result,
+            'freshness' => isset($data['domain_freshness']) ? $data['domain_freshness'] : array(),
+            'warnings' => array(
+                'financial' => $financial_data === null,
+                'transportation' => $transportation_data === null,
+            ),
+        ));
+
         $query_args = array('study_year' => $study_year);
-        $family_result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/card', $query_args);
+        $family_result = array('success' => false);
 
         if (empty($family_result['success']) || !isset($family_result['data']) || !is_array($family_result['data']) || !empty($family_result['data']['not_found'])) {
             $status_code = isset($family_result['status_code']) ? (int) $family_result['status_code'] : 0;
@@ -736,8 +765,8 @@ class Olama_Core_Admin {
             ), $status_code >= 400 ? $status_code : 502);
         }
 
-        $financial_result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/financial-card', $query_args);
-        $transportation_result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/transportation', $query_args);
+        $financial_result = array('success' => false);
+        $transportation_result = array('success' => false);
 
         $financial_data = !empty($financial_result['success']) && isset($financial_result['data']) && is_array($financial_result['data']) ? $financial_result['data'] : null;
         $transportation_data = !empty($transportation_result['success']) && isset($transportation_result['data']) && is_array($transportation_result['data']) ? $transportation_result['data'] : null;
@@ -756,11 +785,11 @@ class Olama_Core_Admin {
         $family_id = isset($_GET['family_id']) ? absint($_GET['family_id']) : 0;
         $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $default_study_year;
         $nonce = wp_create_nonce('olama_core_family_card');
-        $oracle_available = function_exists('olama_oracle_sync_api_get');
+        $oracle_available = true;
 
         echo '<div class="wrap olama-core-admin olama-family-profile-admin" dir="rtl"><div class="olama-page">';
         echo '<header class="olama-page-header"><div><h1 class="olama-page-title">بطاقة العائلة</h1>';
-        echo '<p class="olama-page-subtitle">عرض بيانات العائلة والأب والأم والطلاب المرتبطين بها من نظام Oracle ERP</p></div></header>';
+        echo '<p class="olama-page-subtitle">عرض بيانات العائلة والطلاب من النسخة المحلية المعتمدة في Olama Core</p></div></header>';
         if (!$oracle_available) {
             echo '<div class="olama-error"><p>' . esc_html__('Olama Oracle Sync is required to load family card data. Please activate and configure it first.', 'olama-core') . '</p></div>';
         }
@@ -769,6 +798,7 @@ class Olama_Core_Admin {
         echo '<div class="olama-filter-grid">';
         echo '<p><label class="olama-label" for="olama_family_profile_card_family_id">رقم العائلة</label><input type="number" min="1" step="1" id="olama_family_profile_card_family_id" class="regular-text" value="' . esc_attr($family_id ? $family_id : '') . '" required></p>';
         echo '<p><label class="olama-label" for="olama_family_profile_card_study_year">السنة الدراسية</label><input type="text" id="olama_family_profile_card_study_year" class="regular-text" value="' . esc_attr($study_year) . '" placeholder="2026-2027"></p>';
+        echo '<p><label class="olama-label" for="olama_family_profile_card_source_mode">مصدر العرض</label><select id="olama_family_profile_card_source_mode"><option value="local">النسخة المحفوظة</option><option value="refresh">تحديث من Oracle ثم العرض</option></select></p>';
         echo '<p class="olama-filter-submit">';
         submit_button('تحميل بطاقة العائلة', 'primary olama-btn olama-btn-primary', 'submit', false, $oracle_available ? array() : array('disabled' => 'disabled'));
         echo '</p></div></form>';
@@ -797,10 +827,6 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'), 403);
         }
 
-        if (!function_exists('olama_oracle_sync_api_get')) {
-            wp_send_json_error(array('message' => 'Olama Oracle Sync is required to load family card data. Please activate and configure it first.'), 400);
-        }
-
         $family_id = isset($_POST['family_id']) ? absint($_POST['family_id']) : 0;
         $study_year = isset($_POST['study_year']) ? sanitize_text_field(wp_unslash($_POST['study_year'])) : '';
 
@@ -808,9 +834,18 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'أدخل رقم عائلة صحيح.'), 400);
         }
 
-        $result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/card', array(
+        $refresh_result = $this->refresh_family_if_requested($family_id, $study_year);
+        $card = $this->core->knowledge()->get_family_card($family_id, $study_year);
+        if (empty($card['family'])) {
+            wp_send_json_error(array('message' => 'لا توجد بيانات محفوظة لهذه العائلة. شغّل مزامنة Oracle لهذه العائلة أولاً.'), 404);
+        }
+        wp_send_json_success(array('status_code' => 200, 'source' => 'olama_core', 'refresh' => $refresh_result, 'card' => $card));
+
+        $result = olama_core()->knowledge()->get_family_card($family_id, $study_year) ? array('success' => true, 'data' => olama_core()->knowledge()->get_family_card($family_id, $study_year)) : array('success' => false);
+        /* Legacy response normalization retained below for compatibility. */
+        $unused_query = array(
             'study_year' => $study_year,
-        ));
+        );
 
         if (empty($result['success'])) {
             $status_code = isset($result['status_code']) ? (int) $result['status_code'] : 0;
@@ -842,11 +877,11 @@ class Olama_Core_Admin {
         $family_id = isset($_GET['family_id']) ? absint($_GET['family_id']) : 0;
         $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $default_study_year;
         $nonce = wp_create_nonce('olama_core_family_financial_card');
-        $oracle_available = function_exists('olama_oracle_sync_api_get');
+        $oracle_available = true;
 
         echo '<div class="wrap olama-core-admin olama-family-card-admin" dir="rtl"><div class="olama-page">';
         echo '<header class="olama-page-header"><div><h1 class="olama-page-title">البطاقة المالية</h1>';
-        echo '<p class="olama-page-subtitle">عرض الملخص المالي والاستحقاقات والحركات المالية للعائلة من نظام Oracle ERP</p></div></header>';
+        echo '<p class="olama-page-subtitle">عرض الملخص والاستحقاقات والحركات المالية المحفوظة في Olama Core</p></div></header>';
         if (!$oracle_available) {
             echo '<div class="olama-error"><p>Olama Oracle Sync is required to load the financial card. Please activate and configure it first.</p></div>';
         }
@@ -855,6 +890,7 @@ class Olama_Core_Admin {
         echo '<div class="olama-filter-grid">';
         echo '<p><label class="olama-label" for="olama_family_card_family_id">رقم العائلة</label><input type="number" min="1" step="1" id="olama_family_card_family_id" class="regular-text" value="' . esc_attr($family_id ? $family_id : '') . '" required></p>';
         echo '<p><label class="olama-label" for="olama_family_card_study_year">السنة الدراسية</label><input type="text" id="olama_family_card_study_year" class="regular-text" value="' . esc_attr($study_year) . '" placeholder="2026-2027"></p>';
+        echo '<p><label class="olama-label" for="olama_family_card_source_mode">مصدر العرض</label><select id="olama_family_card_source_mode"><option value="local">النسخة المحفوظة</option><option value="refresh">تحديث من Oracle ثم العرض</option></select></p>';
         echo '<p class="olama-filter-submit">';
         submit_button('تحميل البطاقة المالية', 'primary olama-btn olama-btn-primary', 'submit', false, $oracle_available ? array() : array('disabled' => 'disabled'));
         echo '</p></div></form>';
@@ -882,10 +918,6 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'), 403);
         }
 
-        if (!function_exists('olama_oracle_sync_api_get')) {
-            wp_send_json_error(array('message' => 'Olama Oracle Sync is required to load the financial card. Please activate and configure it first.'), 400);
-        }
-
         $family_id = isset($_POST['family_id']) ? absint($_POST['family_id']) : 0;
         $study_year = isset($_POST['study_year']) ? sanitize_text_field(wp_unslash($_POST['study_year'])) : '';
 
@@ -893,9 +925,17 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'Enter a valid Family ID.'), 400);
         }
 
-        $result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/financial-card', array(
+        $refresh_result = $this->refresh_family_if_requested($family_id, $study_year);
+        $card = $this->core->financial()->get_family_card($family_id, $study_year);
+        if (empty($card['family_summary']) && empty($card['due_allocations']) && empty($card['student_transactions'])) {
+            wp_send_json_error(array('message' => 'لا توجد بيانات مالية محفوظة لهذه العائلة. شغّل مزامنة Oracle لهذه العائلة أولاً.'), 404);
+        }
+        wp_send_json_success(array('status_code' => 200, 'source' => 'olama_core', 'refresh' => $refresh_result, 'card' => $card));
+
+        $result = array('success' => true, 'data' => olama_core()->financial()->get_family_card($family_id, $study_year));
+        $unused_query = array(
             'study_year' => $study_year,
-        ));
+        );
 
         if (empty($result['success'])) {
             $status_code = isset($result['status_code']) ? (int) $result['status_code'] : 0;
@@ -927,11 +967,11 @@ class Olama_Core_Admin {
         $family_id = isset($_GET['family_id']) ? absint($_GET['family_id']) : 0;
         $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $default_study_year;
         $nonce = wp_create_nonce('olama_core_family_transportation_card');
-        $oracle_available = function_exists('olama_oracle_sync_api_get');
+        $oracle_available = true;
 
         echo '<div class="wrap olama-core-admin olama-family-transportation-admin" dir="rtl"><div class="olama-page">';
         echo '<header class="olama-page-header"><div><h1 class="olama-page-title">بطاقة المواصلات</h1>';
-        echo '<p class="olama-page-subtitle">عرض بيانات مواصلات الطلاب والباصات والرسوم من نظام Oracle ERP</p></div></header>';
+        echo '<p class="olama-page-subtitle">عرض بيانات مواصلات الطلاب والباصات والرسوم المحفوظة في Olama Core</p></div></header>';
         if (!$oracle_available) {
             echo '<div class="olama-error"><p>' . esc_html__('Olama Oracle Sync is required to load transportation data. Please activate and configure it first.', 'olama-core') . '</p></div>';
         }
@@ -940,6 +980,7 @@ class Olama_Core_Admin {
         echo '<div class="olama-filter-grid">';
         echo '<p><label class="olama-label" for="olama_transportation_card_family_id">رقم العائلة</label><input type="number" min="1" step="1" id="olama_transportation_card_family_id" class="regular-text" value="' . esc_attr($family_id ? $family_id : '') . '" required></p>';
         echo '<p><label class="olama-label" for="olama_transportation_card_study_year">السنة الدراسية</label><input type="text" id="olama_transportation_card_study_year" class="regular-text" value="' . esc_attr($study_year) . '" placeholder="2026-2027"></p>';
+        echo '<p><label class="olama-label" for="olama_transportation_card_source_mode">مصدر العرض</label><select id="olama_transportation_card_source_mode"><option value="local">النسخة المحفوظة</option><option value="refresh">تحديث من Oracle ثم العرض</option></select></p>';
         echo '<p class="olama-filter-submit">';
         submit_button('تحميل بطاقة المواصلات', 'primary olama-btn olama-btn-primary', 'submit', false, $oracle_available ? array() : array('disabled' => 'disabled'));
         echo '</p></div></form>';
@@ -966,10 +1007,6 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'), 403);
         }
 
-        if (!function_exists('olama_oracle_sync_api_get')) {
-            wp_send_json_error(array('message' => 'Olama Oracle Sync is required to load transportation data. Please activate and configure it first.'), 400);
-        }
-
         $family_id = isset($_POST['family_id']) ? absint($_POST['family_id']) : 0;
         $study_year = isset($_POST['study_year']) ? sanitize_text_field(wp_unslash($_POST['study_year'])) : '';
 
@@ -977,9 +1014,32 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'أدخل رقم عائلة صحيح.'), 400);
         }
 
-        $result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/transportation', array(
-            'study_year' => $study_year,
+        $refresh_result = $this->refresh_family_if_requested($family_id, $study_year);
+        $rows = $this->core->transportation()->get_family($family_id, $study_year);
+        $last_synced_at = '';
+        foreach ($rows as $row) {
+            if (!empty($row['last_synced_at']) && $row['last_synced_at'] > $last_synced_at) {
+                $last_synced_at = $row['last_synced_at'];
+            }
+        }
+        wp_send_json_success(array(
+            'status_code' => 200,
+            'source' => 'olama_core',
+            'refresh' => $refresh_result,
+            'transportation' => array(
+                'status' => 'success',
+                'family_id' => $family_id,
+                'study_year' => $study_year,
+                'count' => count($rows),
+                'last_synced_at' => $last_synced_at,
+                'transportation' => $rows,
+            ),
         ));
+
+        $result = array('success' => true, 'data' => array('transportation' => olama_core()->transportation()->get_family($family_id, $study_year)));
+        $unused_query = array(
+            'study_year' => $study_year,
+        );
 
         if (empty($result['success'])) {
             $status_code = isset($result['status_code']) ? (int) $result['status_code'] : 0;
@@ -1010,11 +1070,11 @@ class Olama_Core_Admin {
         $student_id = isset($_GET['student_id']) ? absint($_GET['student_id']) : 0;
         $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $default_study_year;
         $nonce = wp_create_nonce('olama_core_student_card');
-        $oracle_available = function_exists('olama_oracle_sync_api_get');
+        $oracle_available = true;
 
         echo '<div class="wrap olama-core-admin olama-student-card-admin" dir="rtl"><div class="olama-page">';
         echo '<header class="olama-page-header"><div><h1 class="olama-page-title">بطاقة الطالب</h1>';
-        echo '<p class="olama-page-subtitle">عرض شامل لبيانات الطالب والسنة الدراسية والعائلة والمواصلات من نظام Oracle ERP</p></div></header>';
+        echo '<p class="olama-page-subtitle">عرض بيانات الطالب والسنة الدراسية والعائلة والمواصلات من النسخة المحلية في Olama Core</p></div></header>';
         if (!$oracle_available) {
             echo '<div class="olama-error"><p>' . esc_html__('Olama Oracle Sync is required to load student card data. Please activate and configure it first.', 'olama-core') . '</p></div>';
         }
@@ -1024,6 +1084,7 @@ class Olama_Core_Admin {
         echo '<p><label class="olama-label" for="olama_student_card_family_id">رقم العائلة</label><input type="number" min="1" step="1" id="olama_student_card_family_id" class="regular-text" value="' . esc_attr($family_id ? $family_id : '') . '" required></p>';
         echo '<p><label class="olama-label" for="olama_student_card_student_id">رقم الطالب</label><input type="number" min="1" step="1" id="olama_student_card_student_id" class="regular-text" value="' . esc_attr($student_id ? $student_id : '') . '" required></p>';
         echo '<p><label class="olama-label" for="olama_student_card_study_year">السنة الدراسية</label><input type="text" id="olama_student_card_study_year" class="regular-text" value="' . esc_attr($study_year) . '" placeholder="2026-2027"></p>';
+        echo '<p><label class="olama-label" for="olama_student_card_source_mode">مصدر العرض</label><select id="olama_student_card_source_mode"><option value="local">النسخة المحفوظة</option><option value="refresh">تحديث العائلة من Oracle ثم العرض</option></select></p>';
         echo '<p class="olama-filter-submit">';
         submit_button('تحميل بطاقة الطالب', 'primary olama-btn olama-btn-primary', 'submit', false, $oracle_available ? array() : array('disabled' => 'disabled'));
         echo '</p></div></form>';
@@ -1053,10 +1114,6 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'), 403);
         }
 
-        if (!function_exists('olama_oracle_sync_api_get')) {
-            wp_send_json_error(array('message' => 'Olama Oracle Sync is required to load student card data. Please activate and configure it first.'), 400);
-        }
-
         $family_id = isset($_POST['family_id']) ? absint($_POST['family_id']) : 0;
         $student_id = isset($_POST['student_id']) ? absint($_POST['student_id']) : 0;
         $study_year = isset($_POST['study_year']) ? sanitize_text_field(wp_unslash($_POST['study_year'])) : '';
@@ -1069,9 +1126,17 @@ class Olama_Core_Admin {
             wp_send_json_error(array('message' => 'أدخل رقم طالب صحيح.'), 400);
         }
 
-        $result = olama_oracle_sync_api_get('/api/families/' . rawurlencode((string) $family_id) . '/students/' . rawurlencode((string) $student_id) . '/card', array(
+        $refresh_result = $this->refresh_family_if_requested($family_id, $study_year);
+        $card = $this->core->knowledge()->get_student_card($family_id, $student_id, $study_year);
+        if (empty($card['student'])) {
+            wp_send_json_error(array('message' => 'لا توجد بيانات محفوظة لهذا الطالب. شغّل مزامنة Oracle لهذه العائلة أولاً.'), 404);
+        }
+        wp_send_json_success(array('status_code' => 200, 'source' => 'olama_core', 'refresh' => $refresh_result, 'card' => $card));
+
+        $result = array('success' => true, 'data' => olama_core()->knowledge()->get_student_card($family_id, $student_id, $study_year));
+        $unused_query = array(
             'study_year' => $study_year,
-        ));
+        );
 
         if (empty($result['success'])) {
             $status_code = isset($result['status_code']) ? (int) $result['status_code'] : 0;
@@ -1493,6 +1558,7 @@ class Olama_Core_Admin {
                 body.append('nonce', document.getElementById('olama_family_360_nonce').value);
                 body.append('family_id', familyId);
                 body.append('study_year', studyYear);
+                body.append('refresh', document.getElementById('olama_family_360_source_mode').value === 'refresh' ? '1' : '0');
 
                 fetch(ajaxurl, {
                     method: 'POST',
@@ -1508,9 +1574,11 @@ class Olama_Core_Admin {
                         throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'تعذر تحميل لوحة العائلة 360.');
                     }
                     report.innerHTML = payload.data.html || '';
+                    var familySync = payload.data.freshness && payload.data.freshness.family ? payload.data.freshness.family : '';
+                    showMessage('success', 'تم عرض البيانات المحفوظة في Olama Core' + (familySync ? ' — آخر مزامنة: ' + familySync : '') + '.');
+                    if (payload.data.refresh && !payload.data.refresh.success) { showMessage('error', (payload.data.refresh.message || 'تعذر التحديث من Oracle.') + ' تم عرض آخر نسخة محفوظة.'); }
                     renderHeaderActions(familyId, studyYear);
                     results.hidden = false;
-                    showMessage('success', 'تم تحميل لوحة العائلة 360.');
                 }).catch(function(error) {
                     clearNode(report);
                     clearNode(headerActions);
@@ -1929,6 +1997,7 @@ class Olama_Core_Admin {
                 body.append('nonce', document.getElementById('olama_family_profile_card_nonce').value);
                 body.append('family_id', familyId);
                 body.append('study_year', studyYear);
+                body.append('refresh', document.getElementById('olama_family_profile_card_source_mode').value === 'refresh' ? '1' : '0');
 
                 fetch(ajaxurl, {
                     method: 'POST',
@@ -1944,9 +2013,8 @@ class Olama_Core_Admin {
                         throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'تعذر تحميل بطاقة العائلة.');
                     }
                     renderCard(payload.data.card || {});
-                    if (!results.hidden) {
-                        showMessage('success', 'تم تحميل بطاقة العائلة.');
-                    }
+                    showMessage('success', 'تم عرض البيانات المحفوظة في Olama Core' + (payload.data.card && payload.data.card.last_synced_at ? ' — آخر مزامنة: ' + payload.data.card.last_synced_at : '') + '.');
+                    if (payload.data.refresh && !payload.data.refresh.success) { showMessage('error', (payload.data.refresh.message || 'تعذر التحديث من Oracle.') + ' تم عرض آخر نسخة محفوظة.'); }
                 }).catch(function(error) {
                     showMessage('error', error.message);
                 }).finally(function() {
@@ -2299,6 +2367,7 @@ class Olama_Core_Admin {
                 body.append('nonce', document.getElementById('olama_family_card_nonce').value);
                 body.append('family_id', familyId);
                 body.append('study_year', studyYear);
+                body.append('refresh', document.getElementById('olama_family_card_source_mode').value === 'refresh' ? '1' : '0');
 
                 fetch(ajaxurl, {
                     method: 'POST',
@@ -2314,7 +2383,8 @@ class Olama_Core_Admin {
                         throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'تعذر تحميل البطاقة المالية.');
                     }
                     renderCard(payload.data.card || {});
-                    showMessage('success', 'تم تحميل البطاقة المالية.');
+                    showMessage('success', 'تم عرض البيانات المالية المحفوظة في Olama Core' + (payload.data.card && payload.data.card.last_synced_at ? ' — آخر مزامنة: ' + payload.data.card.last_synced_at : '') + '.');
+                    if (payload.data.refresh && !payload.data.refresh.success) { showMessage('error', (payload.data.refresh.message || 'تعذر التحديث من Oracle.') + ' تم عرض آخر نسخة محفوظة.'); }
                 }).catch(function(error) {
                     showMessage('error', error.message);
                 }).finally(function() {
@@ -2687,6 +2757,7 @@ class Olama_Core_Admin {
                 body.append('nonce', document.getElementById('olama_transportation_card_nonce').value);
                 body.append('family_id', familyId);
                 body.append('study_year', studyYear);
+                body.append('refresh', document.getElementById('olama_transportation_card_source_mode').value === 'refresh' ? '1' : '0');
 
                 fetch(ajaxurl, {
                     method: 'POST',
@@ -2702,7 +2773,8 @@ class Olama_Core_Admin {
                         throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'تعذر تحميل بطاقة المواصلات.');
                     }
                     renderCard(payload.data.transportation || {});
-                    showMessage('success', 'تم تحميل بطاقة المواصلات.');
+                    showMessage('success', 'تم عرض بيانات المواصلات المحفوظة في Olama Core' + (payload.data.transportation && payload.data.transportation.last_synced_at ? ' — آخر مزامنة: ' + payload.data.transportation.last_synced_at : '') + '.');
+                    if (payload.data.refresh && !payload.data.refresh.success) { showMessage('error', (payload.data.refresh.message || 'تعذر التحديث من Oracle.') + ' تم عرض آخر نسخة محفوظة.'); }
                 }).catch(function(error) {
                     showMessage('error', error.message);
                 }).finally(function() {
@@ -3158,6 +3230,7 @@ class Olama_Core_Admin {
                 body.append('family_id', familyId);
                 body.append('student_id', studentId);
                 body.append('study_year', studyYear);
+                body.append('refresh', document.getElementById('olama_student_card_source_mode').value === 'refresh' ? '1' : '0');
 
                 fetch(ajaxurl, {
                     method: 'POST',
@@ -3173,9 +3246,8 @@ class Olama_Core_Admin {
                         throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'تعذر تحميل بطاقة الطالب.');
                     }
                     renderCard(payload.data.card || {});
-                    if (!results.hidden) {
-                        showMessage('success', 'تم تحميل بطاقة الطالب.');
-                    }
+                    showMessage('success', 'تم عرض بيانات الطالب المحفوظة في Olama Core' + (payload.data.card && payload.data.card.last_synced_at ? ' — آخر مزامنة: ' + payload.data.card.last_synced_at : '') + '.');
+                    if (payload.data.refresh && !payload.data.refresh.success) { showMessage('error', (payload.data.refresh.message || 'تعذر التحديث من Oracle.') + ' تم عرض آخر نسخة محفوظة.'); }
                 }).catch(function(error) {
                     showMessage('error', error.message);
                 }).finally(function() {

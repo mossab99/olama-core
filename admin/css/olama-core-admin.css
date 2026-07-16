@@ -338,6 +338,9 @@
     border: 1px solid var(--olama-border);
     border-radius: var(--olama-radius);
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-gutter: stable;
+    max-width: 100%;
 }
 
 .olama-core-admin .olama-table {
@@ -353,6 +356,23 @@
     padding: 11px 12px;
     text-align: right;
     vertical-align: middle;
+    max-width: 240px;
+    overflow-wrap: anywhere;
+}
+
+.olama-core-admin .olama-table th:last-child,
+.olama-core-admin .olama-table td:last-child {
+    background: var(--olama-surface);
+    box-shadow: 8px 0 18px rgba(15, 23, 42, 0.08);
+    position: sticky;
+    left: 0;
+    min-width: 170px;
+    z-index: 2;
+}
+
+.olama-core-admin .olama-table th:last-child {
+    background: #f9fafb;
+    z-index: 3;
 }
 
 .olama-core-admin .olama-table th {

@@ -9,6 +9,10 @@ class Olama_Core_Container {
     private $families;
     private $students;
     private $student_years;
+    private $financial;
+    private $transportation;
+    private $knowledge;
+    private $audiences;
     private $staff;
     private $admin;
     private $users_admin;
@@ -61,6 +65,38 @@ class Olama_Core_Container {
         }
 
         return $this->student_years;
+    }
+
+    public function financial() {
+        if (!$this->financial) {
+            $this->financial = new Olama_Core_Financial_Service(new Olama_Core_Repository());
+        }
+
+        return $this->financial;
+    }
+
+    public function transportation() {
+        if (!$this->transportation) {
+            $this->transportation = new Olama_Core_Transportation_Service(new Olama_Core_Repository());
+        }
+
+        return $this->transportation;
+    }
+
+    public function knowledge() {
+        if (!$this->knowledge) {
+            $this->knowledge = new Olama_Core_Knowledge_Service();
+        }
+
+        return $this->knowledge;
+    }
+
+    public function audiences() {
+        if (!$this->audiences) {
+            $this->audiences = new Olama_Core_Audience_Service(new Olama_Core_Repository());
+        }
+
+        return $this->audiences;
     }
 
     public function staff() {
