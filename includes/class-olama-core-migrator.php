@@ -24,6 +24,7 @@ class Olama_Core_Migrator {
         $financial_transactions = $wpdb->prefix . 'olama_core_financial_transactions';
         $student_transportation = $wpdb->prefix . 'olama_core_student_transportation';
         $staff_profiles = $wpdb->prefix . 'olama_core_staff_profiles';
+        $employees = $wpdb->prefix . 'olama_core_employees';
         $audit_logs = $wpdb->prefix . 'olama_logs';
 
         dbDelta("CREATE TABLE {$families} (
@@ -311,6 +312,36 @@ class Olama_Core_Migrator {
             updated_at DATETIME NOT NULL,
             PRIMARY KEY  (user_id),
             KEY idx_employee_id (employee_id)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$employees} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            employee_id VARCHAR(50) NOT NULL,
+            full_name VARCHAR(255) NOT NULL,
+            national_number VARCHAR(50) NULL,
+            birth_date DATE NULL,
+            gender VARCHAR(30) NULL,
+            job_title VARCHAR(255) NULL,
+            appointment_date DATE NULL,
+            address TEXT NULL,
+            phones VARCHAR(100) NULL,
+            certificate_grade VARCHAR(150) NULL,
+            certificate_type VARCHAR(150) NULL,
+            certificate_date DATE NULL,
+            certificate_average DECIMAL(10,3) NULL,
+            employee_status VARCHAR(50) NOT NULL,
+            source_system VARCHAR(30) NOT NULL DEFAULT 'oracle',
+            source_hash VARCHAR(64) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_employee_id (employee_id),
+            KEY idx_employee_status (employee_status),
+            KEY idx_employee_name (full_name),
+            KEY idx_employee_job (job_title),
+            KEY idx_employee_synced (last_synced_at)
         ) {$charset_collate};");
 
         dbDelta("CREATE TABLE {$audit_logs} (

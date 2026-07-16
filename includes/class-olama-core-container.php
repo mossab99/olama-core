@@ -14,6 +14,7 @@ class Olama_Core_Container {
     private $knowledge;
     private $audiences;
     private $staff;
+    private $employees;
     private $admin;
     private $users_admin;
     private $admin_initialized = false;
@@ -105,5 +106,13 @@ class Olama_Core_Container {
         }
 
         return $this->staff;
+    }
+
+    public function employees() {
+        if (!$this->employees) {
+            $this->employees = new Olama_Core_Employee_Service(new Olama_Core_Repository());
+        }
+
+        return $this->employees;
     }
 }
