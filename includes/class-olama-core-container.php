@@ -11,6 +11,7 @@ class Olama_Core_Container {
     private $student_years;
     private $financial;
     private $transportation;
+    private $transport_master;
     private $knowledge;
     private $audiences;
     private $staff;
@@ -82,6 +83,14 @@ class Olama_Core_Container {
         }
 
         return $this->transportation;
+    }
+
+    public function transport_master() {
+        if (!$this->transport_master) {
+            $this->transport_master = new Olama_Core_Transport_Master_Service(new Olama_Core_Repository());
+        }
+
+        return $this->transport_master;
     }
 
     public function knowledge() {

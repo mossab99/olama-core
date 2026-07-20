@@ -78,32 +78,8 @@ class Olama_Core_Users_Admin {
 
     private function save_permissions() {
         $this->authorize('olama_manage_users_permissions', 'olama_core_save_permissions');
-        $groups = Olama_Core_Permissions::get_all_capabilities();
-        $roles = $this->editable_roles();
-        $submitted = isset($_POST['caps']) && is_array($_POST['caps']) ? wp_unslash($_POST['caps']) : array();
-
-        foreach ($roles as $role_name => $label) {
-            if ('administrator' === $role_name) {
-                continue;
-            }
-            $role = get_role($role_name);
-            if (!$role) {
-                continue;
-            }
-            foreach ($groups as $group) {
-                foreach ((array) $group['caps'] as $capability => $cap_label) {
-                    if (isset($submitted[$role_name][$capability])) {
-                        $role->add_cap($capability);
-                    } else {
-                        $role->remove_cap($capability);
-                    }
-                }
-            }
-        }
-
-        $this->sync_mirror_roles();
-        Olama_Core_Logger::log('role_permissions_updated', 'Updated Olama role permissions.', 'core');
-        $this->redirect_with_notice('permissions', __('Permissions saved.', 'olama-core'));
+        wp_safe_redirect(admin_url('admin.php?page=olama-users-matrix'));
+        exit;
     }
 
     private function save_notifications() {
@@ -286,27 +262,9 @@ class Olama_Core_Users_Admin {
     }
 
     private function render_permissions() {
-        $groups = Olama_Core_Permissions::get_all_capabilities();
-        $roles = $this->editable_roles();
-        echo '<form method="post"><section class="olama-section"><div class="olama-section-header"><div><h2 class="olama-section-title">' . esc_html__('Role capabilities', 'olama-core') . '</h2><p>' . esc_html__('Administrators always retain full access.', 'olama-core') . '</p></div></div>';
-        foreach ($groups as $group) {
-            echo '<div class="olama-permission-group"><h3>' . esc_html($group['label']) . '</h3><div class="olama-permission-grid">';
-            foreach ((array) $group['caps'] as $capability => $label) {
-                echo '<div class="olama-permission-row"><strong>' . esc_html($label) . '</strong><code>' . esc_html($capability) . '</code><div class="olama-permission-roles">';
-                foreach ($roles as $role_name => $role_label) {
-                    $role = get_role($role_name);
-                    $checked = $role && $role->has_cap($capability);
-                    $disabled = 'administrator' === $role_name;
-                    echo '<label><input type="checkbox" name="caps[' . esc_attr($role_name) . '][' . esc_attr($capability) . ']" value="1" ' . checked($checked, true, false) . disabled($disabled, true, false) . '> ' . esc_html($role_label) . '</label>';
-                }
-                echo '</div></div>';
-            }
-            echo '</div></div>';
-        }
-        wp_nonce_field('olama_core_save_permissions');
-        echo '<input type="hidden" name="olama_core_users_action" value="save_permissions">';
-        echo '<p class="submit"><button class="button button-primary" type="submit">' . esc_html__('Save permissions', 'olama-core') . '</button></p>';
-        echo '</section></form>';
+        echo '<section class="olama-section"><h2 class="olama-section-title">' . esc_html__('Role capabilities', 'olama-core') . '</h2>';
+        echo '<p>' . esc_html__('Capabilities are managed centrally by OLAMA Users.', 'olama-core') . '</p>';
+        echo '<p><a class="button button-primary" href="' . esc_url(admin_url('admin.php?page=olama-users-matrix')) . '">' . esc_html__('Open OLAMA Users capabilities', 'olama-core') . '</a></p></section>';
     }
 
     private function render_logs() {
@@ -379,22 +337,7 @@ class Olama_Core_Users_Admin {
     }
 
     private function sync_mirror_roles() {
-        foreach (array('editor' => 'supervisor', 'author' => 'assistant') as $source_name => $target_name) {
-            $source = get_role($source_name);
-            $target = get_role($target_name);
-            if (!$source || !$target) {
-                continue;
-            }
-            foreach (Olama_Core_Permissions::get_all_capabilities() as $group) {
-                foreach ((array) $group['caps'] as $capability => $label) {
-                    if ($source->has_cap($capability)) {
-                        $target->add_cap($capability);
-                    } else {
-                        $target->remove_cap($capability);
-                    }
-                }
-            }
-        }
+        // Role and capability synchronization belongs to OLAMA Users.
     }
 
     private function empty_row($columns) {

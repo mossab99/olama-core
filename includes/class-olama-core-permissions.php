@@ -5,19 +5,11 @@ if (!defined('ABSPATH')) {
 }
 
 class Olama_Core_Permissions {
-    private static $runtime_filter_added = false;
-
     public static function init() {
-        if (!self::$runtime_filter_added) {
-            self::$runtime_filter_added = true;
-            add_filter('user_has_cap', array(__CLASS__, 'grant_supervisor_capabilities'), 10, 4);
-        }
-
         if (get_option('olama_core_caps_version') === OLAMA_CORE_VERSION) {
             return;
         }
 
-        self::add_capabilities();
         update_option('olama_core_caps_version', OLAMA_CORE_VERSION);
     }
 
@@ -40,23 +32,8 @@ class Olama_Core_Permissions {
     }
 
     public static function add_capabilities() {
-        $author = get_role('author');
-        $editor = get_role('editor');
-        if (!get_role('teacher') && $author) {
-            add_role('teacher', __('Teacher', 'olama-core'), $author->capabilities);
-        }
-        if (!get_role('supervisor') && $editor) {
-            add_role('supervisor', __('Supervisor', 'olama-core'), $editor->capabilities);
-        }
-        if (!get_role('assistant') && $author) {
-            add_role('assistant', __('Assistant', 'olama-core'), $author->capabilities);
-        }
-        if (!get_role('accountant') && $author) {
-            add_role('accountant', __('Accountant', 'olama-core'), $author->capabilities);
-        }
-
         $groups = self::get_all_capabilities();
-        foreach (array('administrator', 'editor', 'supervisor') as $role_name) {
+        foreach (array('administrator') as $role_name) {
             $role = get_role($role_name);
             if (!$role) {
                 continue;
@@ -74,21 +51,14 @@ class Olama_Core_Permissions {
         if (!$user_id) {
             return false;
         }
-        if (user_can($user_id, 'manage_options')) {
-            return true;
-        }
-        $user = get_userdata($user_id);
-        if ($user && in_array('supervisor', (array) $user->roles, true) && strpos($capability, 'olama_') === 0) {
-            return true;
-        }
         return user_can($user_id, $capability);
     }
 
     public static function grant_supervisor_capabilities($allcaps, $caps, $args, $user) {
         $requested = isset($args[0]) ? (string) $args[0] : '';
         $is_olama_cap = $requested && strpos($requested, 'olama_') === 0;
-        $is_privileged = !empty($allcaps['manage_options']) || in_array('supervisor', (array) $user->roles, true);
-        if ($is_olama_cap && $is_privileged) {
+        $is_administrator = in_array('administrator', (array) $user->roles, true);
+        if ($is_olama_cap && $is_administrator) {
             $allcaps[$requested] = true;
         }
         return $allcaps;

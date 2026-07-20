@@ -23,6 +23,8 @@ class Olama_Core_Migrator {
         $family_financial_dues = $wpdb->prefix . 'olama_core_family_financial_dues';
         $financial_transactions = $wpdb->prefix . 'olama_core_financial_transactions';
         $student_transportation = $wpdb->prefix . 'olama_core_student_transportation';
+        $transport_buses = $wpdb->prefix . 'olama_core_transport_buses';
+        $transport_regions = $wpdb->prefix . 'olama_core_transport_regions';
         $staff_profiles = $wpdb->prefix . 'olama_core_staff_profiles';
         $employees = $wpdb->prefix . 'olama_core_employees';
         $audit_logs = $wpdb->prefix . 'olama_logs';
@@ -304,6 +306,70 @@ class Olama_Core_Migrator {
             KEY idx_synced_at (synced_at)
         ) {$charset_collate};");
 
+        dbDelta("CREATE TABLE {$transport_buses} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            bus_uid VARCHAR(100) NOT NULL,
+            oracle_bus_id VARCHAR(100) NOT NULL,
+            bus_number VARCHAR(50) NOT NULL,
+            description VARCHAR(255) NULL,
+            model VARCHAR(100) NULL,
+            plate_number VARCHAR(50) NULL,
+            government_number VARCHAR(100) NULL,
+            driver_license_number VARCHAR(100) NULL,
+            chassis_number VARCHAR(100) NULL,
+            registered_capacity SMALLINT UNSIGNED NULL,
+            engine_capacity VARCHAR(50) NULL,
+            fuel_type VARCHAR(50) NULL,
+            driver_employee_uid VARCHAR(100) NULL,
+            driver_employee_id VARCHAR(50) NULL,
+            driver_employee_name VARCHAR(255) NULL,
+            companion_employee_uid VARCHAR(100) NULL,
+            companion_employee_id VARCHAR(50) NULL,
+            companion_employee_name VARCHAR(255) NULL,
+            last_license_renewal DATE NULL,
+            next_license_renewal DATE NULL,
+            is_active TINYINT NOT NULL DEFAULT 1,
+            source_system VARCHAR(30) NOT NULL DEFAULT 'oracle',
+            source_hash VARCHAR(64) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_bus_uid (bus_uid),
+            UNIQUE KEY uniq_oracle_bus (oracle_bus_id),
+            KEY idx_bus_number (bus_number),
+            KEY idx_plate_number (plate_number),
+            KEY idx_bus_government_number (government_number),
+            KEY idx_driver_license_number (driver_license_number),
+            KEY idx_driver_employee (driver_employee_uid),
+            KEY idx_bus_active (is_active),
+            KEY idx_bus_synced (last_synced_at)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$transport_regions} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            region_uid VARCHAR(100) NOT NULL,
+            oracle_region_id VARCHAR(100) NOT NULL,
+            region_name VARCHAR(190) NULL,
+            sample_address TEXT NULL,
+            source_family_count INT UNSIGNED NULL,
+            source_student_count INT UNSIGNED NULL,
+            is_active TINYINT NOT NULL DEFAULT 1,
+            source_system VARCHAR(30) NOT NULL DEFAULT 'oracle',
+            source_hash VARCHAR(64) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_region_uid (region_uid),
+            UNIQUE KEY uniq_oracle_region (oracle_region_id),
+            KEY idx_region_name (region_name),
+            KEY idx_region_active (is_active),
+            KEY idx_region_synced (last_synced_at)
+        ) {$charset_collate};");
+
         dbDelta("CREATE TABLE {$staff_profiles} (
             user_id BIGINT UNSIGNED NOT NULL,
             employee_id VARCHAR(50) NULL,
@@ -358,6 +424,13 @@ class Olama_Core_Migrator {
             KEY created_at (created_at)
         ) {$charset_collate};");
 
+        // BUS_LICENSE_* was previously misclassified as a vehicle plate.
+        $wpdb->query(
+            "UPDATE `{$transport_buses}`
+             SET driver_license_number = plate_number, plate_number = NULL
+             WHERE driver_license_number IS NULL AND plate_number IS NOT NULL"
+        );
+
         $legacy_teachers = $wpdb->prefix . 'olama_teachers';
         if (self::table_exists($legacy_teachers)) {
             $wpdb->query(
@@ -379,6 +452,8 @@ class Olama_Core_Migrator {
             $wpdb->prefix . 'olama_core_family_financial_dues',
             $wpdb->prefix . 'olama_core_financial_transactions',
             $wpdb->prefix . 'olama_core_student_transportation',
+            $wpdb->prefix . 'olama_core_transport_buses',
+            $wpdb->prefix . 'olama_core_transport_regions',
             $wpdb->prefix . 'olama_core_staff_profiles',
             $wpdb->prefix . 'olama_logs',
         );
