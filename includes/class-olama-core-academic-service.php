@@ -24,6 +24,14 @@ class Olama_Core_Academic_Service {
     public function import_snapshot(array $snapshot) {
         global $wpdb;
 
+        if (!Olama_Core_Migrator::schema_is_current()) {
+            Olama_Core_Migrator::create_tables();
+            if (!Olama_Core_Migrator::schema_is_current()) {
+                throw new RuntimeException('Olama Core academic database schema could not be installed. Verify database CREATE and ALTER permissions.');
+            }
+            update_option('olama_core_db_version', OLAMA_CORE_VERSION);
+        }
+
         $study_year = $this->text($snapshot, 'study_year');
         if ('' === $study_year) {
             throw new InvalidArgumentException('Academic snapshot study year is required.');
@@ -214,6 +222,7 @@ class Olama_Core_Academic_Service {
         }
         $id = $this->repo->insert($this->grade_subjects, array(
             'study_year' => $study_year,
+            'law_id' => $this->nullable_text($row, 'law_id'),
             'grade_id' => $grade_id,
             'grade_name' => $this->nullable_text($row, 'grade_name'),
             'subject_id' => $subject_id,

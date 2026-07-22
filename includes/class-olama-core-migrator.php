@@ -7,7 +7,9 @@ if (!defined('ABSPATH')) {
 class Olama_Core_Migrator {
     public static function activate() {
         self::create_tables();
-        update_option('olama_core_db_version', OLAMA_CORE_VERSION);
+        if (self::schema_is_current()) {
+            update_option('olama_core_db_version', OLAMA_CORE_VERSION);
+        }
     }
 
     public static function create_tables() {
@@ -475,6 +477,7 @@ class Olama_Core_Migrator {
         dbDelta("CREATE TABLE {$academic_grade_subjects} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             study_year VARCHAR(20) NOT NULL,
+            law_id VARCHAR(50) NULL,
             grade_id VARCHAR(50) NOT NULL,
             grade_name VARCHAR(190) NULL,
             subject_id VARCHAR(50) NOT NULL,
@@ -549,5 +552,28 @@ class Olama_Core_Migrator {
         global $wpdb;
 
         return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table;
+    }
+
+    public static function has_required_tables() {
+        foreach (self::required_tables() as $table) {
+            if (!self::table_exists($table)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function schema_is_current() {
+        global $wpdb;
+
+        if (!self::has_required_tables()) {
+            return false;
+        }
+
+        $grade_subjects = $wpdb->prefix . 'olama_core_academic_grade_subjects';
+        return (bool) $wpdb->get_var(
+            "SHOW COLUMNS FROM `" . esc_sql($grade_subjects) . "` LIKE 'law_id'"
+        );
     }
 }

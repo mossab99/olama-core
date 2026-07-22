@@ -30,9 +30,13 @@ class Olama_Core_Container {
     }
 
     public function init() {
-        if (is_admin() && get_option('olama_core_db_version') !== OLAMA_CORE_VERSION) {
+        $schema_upgrade_required = get_option('olama_core_db_version') !== OLAMA_CORE_VERSION;
+        $schema_repair_required = is_admin() && !Olama_Core_Migrator::schema_is_current();
+        if ($schema_upgrade_required || $schema_repair_required) {
             Olama_Core_Migrator::create_tables();
-            update_option('olama_core_db_version', OLAMA_CORE_VERSION);
+            if (Olama_Core_Migrator::schema_is_current()) {
+                update_option('olama_core_db_version', OLAMA_CORE_VERSION);
+            }
         }
 
         add_action('init', array('Olama_Core_Permissions', 'init'));
