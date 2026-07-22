@@ -27,6 +27,11 @@ class Olama_Core_Migrator {
         $transport_regions = $wpdb->prefix . 'olama_core_transport_regions';
         $staff_profiles = $wpdb->prefix . 'olama_core_staff_profiles';
         $employees = $wpdb->prefix . 'olama_core_employees';
+        $academic_grades = $wpdb->prefix . 'olama_core_academic_grades';
+        $academic_sections = $wpdb->prefix . 'olama_core_academic_sections';
+        $academic_grade_sections = $wpdb->prefix . 'olama_core_academic_grade_sections';
+        $academic_students = $wpdb->prefix . 'olama_core_academic_students';
+        $academic_grade_subjects = $wpdb->prefix . 'olama_core_academic_grade_subjects';
         $audit_logs = $wpdb->prefix . 'olama_logs';
 
         dbDelta("CREATE TABLE {$families} (
@@ -410,6 +415,81 @@ class Olama_Core_Migrator {
             KEY idx_employee_synced (last_synced_at)
         ) {$charset_collate};");
 
+        dbDelta("CREATE TABLE {$academic_grades} (
+            grade_id VARCHAR(50) NOT NULL,
+            grade_name VARCHAR(190) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (grade_id),
+            KEY idx_grade_name (grade_name)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$academic_sections} (
+            section_id VARCHAR(50) NOT NULL,
+            section_name VARCHAR(190) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (section_id),
+            KEY idx_section_name (section_name)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$academic_grade_sections} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            study_year VARCHAR(20) NOT NULL,
+            law_id VARCHAR(50) NULL,
+            grade_id VARCHAR(50) NOT NULL,
+            grade_name VARCHAR(190) NULL,
+            section_id VARCHAR(50) NOT NULL,
+            section_name VARCHAR(190) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_year_grade_section (study_year, grade_id, section_id),
+            KEY idx_grade_section_scope (study_year, grade_id)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$academic_students} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            study_year VARCHAR(20) NOT NULL,
+            family_id VARCHAR(50) NOT NULL,
+            student_id VARCHAR(50) NOT NULL,
+            student_name VARCHAR(255) NULL,
+            grade_id VARCHAR(50) NOT NULL,
+            grade_name VARCHAR(190) NULL,
+            section_id VARCHAR(50) NULL,
+            section_name VARCHAR(190) NULL,
+            student_status VARCHAR(50) NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_academic_student (study_year, family_id, student_id),
+            KEY idx_academic_grade (study_year, grade_id),
+            KEY idx_academic_grade_section (study_year, grade_id, section_id),
+            KEY idx_academic_student_name (student_name)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$academic_grade_subjects} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            study_year VARCHAR(20) NOT NULL,
+            grade_id VARCHAR(50) NOT NULL,
+            grade_name VARCHAR(190) NULL,
+            subject_id VARCHAR(50) NOT NULL,
+            subject_name VARCHAR(190) NULL,
+            is_active TINYINT NOT NULL DEFAULT 1,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_year_grade_subject (study_year, grade_id, subject_id),
+            KEY idx_grade_subject_law (study_year, law_id),
+            KEY idx_grade_subject_scope (study_year, grade_id),
+            KEY idx_grade_subject_active (study_year, grade_id, is_active)
+        ) {$charset_collate};");
+
         dbDelta("CREATE TABLE {$audit_logs} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -455,6 +535,12 @@ class Olama_Core_Migrator {
             $wpdb->prefix . 'olama_core_transport_buses',
             $wpdb->prefix . 'olama_core_transport_regions',
             $wpdb->prefix . 'olama_core_staff_profiles',
+            $wpdb->prefix . 'olama_core_employees',
+            $wpdb->prefix . 'olama_core_academic_grades',
+            $wpdb->prefix . 'olama_core_academic_sections',
+            $wpdb->prefix . 'olama_core_academic_grade_sections',
+            $wpdb->prefix . 'olama_core_academic_students',
+            $wpdb->prefix . 'olama_core_academic_grade_subjects',
             $wpdb->prefix . 'olama_logs',
         );
     }

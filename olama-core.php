@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Olama Core
  * Description: Clean Oracle-backed core family and student foundation for Olama plugins.
- * Version: 0.5.3
+ * Version: 0.6.2
  * Author: Olama
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('OLAMA_CORE_VERSION', '0.5.3');
+define('OLAMA_CORE_VERSION', '0.6.2');
 define('OLAMA_CORE_FILE', __FILE__);
 define('OLAMA_CORE_PATH', plugin_dir_path(__FILE__));
 define('OLAMA_CORE_URL', plugin_dir_url(__FILE__));
@@ -27,6 +27,7 @@ require_once OLAMA_CORE_PATH . 'includes/class-olama-core-knowledge-service.php'
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-audience-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-staff-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-employee-service.php';
+require_once OLAMA_CORE_PATH . 'includes/class-olama-core-academic-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-permissions.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-logger.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-container.php';
@@ -50,7 +51,7 @@ function olama_core_register_hub_card($cards) {
     $cards[] = array(
         'id' => 'olama-core',
         'label' => __('Olama Core', 'olama-core'),
-        'description' => __('Shared family, student, enrollment, staff, and permissions foundation.', 'olama-core'),
+        'description' => __('Shared family, student, academic, enrollment, staff, and permissions foundation.', 'olama-core'),
         'icon' => 'dashicons-database-view',
         'accent' => '#0f766e',
         'accent_rgb' => '15,118,110',
@@ -71,6 +72,14 @@ function olama_core_register_hub_card($cards) {
                 'label' => __('Directory', 'olama-core'),
                 'icon' => 'dashicons-search',
                 'url' => admin_url('admin.php?page=olama-core-directory'),
+                'capability' => 'manage_options',
+                'color' => '#0f766e',
+            ),
+            array(
+                'id' => 'core.academic-info',
+                'label' => __('Academic Info', 'olama-core'),
+                'icon' => 'dashicons-welcome-learn-more',
+                'url' => admin_url('admin.php?page=olama-core-academic-info'),
                 'capability' => 'manage_options',
                 'color' => '#0f766e',
             ),

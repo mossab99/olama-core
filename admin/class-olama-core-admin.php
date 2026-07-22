@@ -26,6 +26,7 @@ class Olama_Core_Admin {
         add_menu_page('Olama Core', 'Olama Core', 'olama_access_users_mgmt', 'olama-core', array($this, 'dashboard'), 'dashicons-database-view', 56);
         add_submenu_page('olama-core', 'لوحة التحكم', 'لوحة التحكم', 'manage_options', 'olama-core', array($this, 'dashboard'));
         add_submenu_page('olama-core', 'الدليل', 'الدليل', 'manage_options', 'olama-core-directory', array($this, 'directory'));
+        add_submenu_page('olama-core', 'Academic Info', 'Academic Info', 'manage_options', 'olama-core-academic-info', array($this, 'academic_info'));
         add_submenu_page('olama-core', 'لوحة العائلة 360', 'لوحة العائلة 360', 'manage_options', 'olama-core-family-360', array($this, 'family_360'));
         add_submenu_page('olama-core', 'لوحة الموظف 360', 'لوحة الموظف 360', 'manage_options', 'olama-core-employee-360', array($this, 'employee_360'));
         add_submenu_page('olama-core', 'بطاقة العائلة', 'بطاقة العائلة', 'manage_options', 'olama-core-family-card', array($this, 'family_card'));
@@ -98,6 +99,7 @@ class Olama_Core_Admin {
 
         echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">روابط تشغيلية</h2></div><div class="olama-actions">';
         $this->render_action_link('فتح الدليل', $this->admin_page_url('olama-core-directory'), 'olama-btn-primary');
+        $this->render_action_link('Academic Info', $this->admin_page_url('olama-core-academic-info'), 'olama-btn-secondary');
         $this->render_action_link('لوحة العائلة 360', $this->family_360_admin_url('olama-core-family-360', 0, $default_study_year), 'olama-btn-secondary');
         $this->render_action_link('لوحة الموظف 360', $this->admin_page_url('olama-core-employee-360'), 'olama-btn-secondary');
         $this->render_action_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', 0, $default_study_year), 'olama-btn-ghost');
@@ -3533,6 +3535,102 @@ class Olama_Core_Admin {
         })();
         </script>
         <?php
+    }
+
+    public function academic_info() {
+        $academic = $this->core->academic();
+        $views = array(
+            'grades' => 'أسماء الصفوف',
+            'sections' => 'أسماء الشعب',
+            'grade_sections' => 'الصفوف والشعب',
+            'grade_students' => 'طلاب الصف',
+            'section_students' => 'طلاب الصف والشعبة',
+            'grade_subjects' => 'مواد الصفوف',
+        );
+        $view = isset($_GET['academic_view']) ? sanitize_key(wp_unslash($_GET['academic_view'])) : 'grades';
+        if (!isset($views[$view])) {
+            $view = 'grades';
+        }
+        $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $academic->latest_study_year();
+        $grade_id = isset($_GET['grade_id']) ? sanitize_text_field(wp_unslash($_GET['grade_id'])) : '';
+        $section_id = isset($_GET['section_id']) ? sanitize_text_field(wp_unslash($_GET['section_id'])) : '';
+        $grades = $academic->grades();
+        $grade_sections = '' !== $study_year ? $academic->grade_sections($study_year) : array();
+
+        if ('' === $grade_id && $grades) {
+            $grade_id = (string) $grades[0]['grade_id'];
+        }
+        if ('' === $section_id && $grade_sections) {
+            foreach ($grade_sections as $grade_section) {
+                if ((string) $grade_section['grade_id'] === $grade_id) {
+                    $section_id = (string) $grade_section['section_id'];
+                    break;
+                }
+            }
+        }
+
+        echo '<div class="wrap olama-core-admin olama-academic-admin" dir="rtl"><div class="olama-page">';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">Academic Info</h1>';
+        echo '<p class="olama-page-subtitle">بيانات أكاديمية محفوظة محلياً في Olama Core. تتم الكتابة بواسطة Oracle Sync فقط، وتقرأ إضافات Olama من جداول Core.</p></div>';
+        echo '<div class="olama-actions"><a class="olama-btn olama-btn-secondary" href="' . esc_url(admin_url('admin.php?page=olama-oracle-sync')) . '">فتح Oracle Sync</a></div></header>';
+
+        echo '<div class="olama-academic-actions">';
+        foreach ($views as $key => $label) {
+            $url = add_query_arg(array(
+                'page' => 'olama-core-academic-info',
+                'academic_view' => $key,
+                'study_year' => $study_year,
+                'grade_id' => $grade_id,
+                'section_id' => $section_id,
+            ), admin_url('admin.php'));
+            echo '<a class="olama-academic-action ' . ($view === $key ? 'is-active' : '') . '" href="' . esc_url($url) . '"><span class="dashicons dashicons-welcome-learn-more"></span><strong>' . esc_html($label) . '</strong></a>';
+        }
+        echo '</div>';
+
+        if (in_array($view, array('grade_sections', 'grade_students', 'section_students', 'grade_subjects'), true)) {
+            echo '<form method="get" class="olama-filter-card olama-academic-filter">';
+            echo '<input type="hidden" name="page" value="olama-core-academic-info"><input type="hidden" name="academic_view" value="' . esc_attr($view) . '">';
+            echo '<p><label class="olama-label" for="academic-study-year">السنة الدراسية</label><input id="academic-study-year" name="study_year" type="text" value="' . esc_attr($study_year) . '" placeholder="2026-2027" required></p>';
+            if (in_array($view, array('grade_students', 'section_students', 'grade_subjects'), true)) {
+                echo '<p><label class="olama-label" for="academic-grade">الصف</label><select id="academic-grade" name="grade_id">';
+                foreach ($grades as $grade) {
+                    echo '<option value="' . esc_attr($grade['grade_id']) . '" ' . selected($grade_id, (string) $grade['grade_id'], false) . '>' . esc_html($this->academic_label($grade['grade_name'], $grade['grade_id'])) . '</option>';
+                }
+                echo '</select></p>';
+            }
+            if ('section_students' === $view) {
+                echo '<p><label class="olama-label" for="academic-section">الشعبة</label><select id="academic-section" name="section_id">';
+                foreach ($grade_sections as $grade_section) {
+                    if ((string) $grade_section['grade_id'] !== $grade_id) {
+                        continue;
+                    }
+                    echo '<option value="' . esc_attr($grade_section['section_id']) . '" ' . selected($section_id, (string) $grade_section['section_id'], false) . '>' . esc_html($this->academic_label($grade_section['section_name'], $grade_section['section_id'])) . '</option>';
+                }
+                echo '</select></p>';
+            }
+            echo '<p class="olama-filter-submit"><button class="olama-btn olama-btn-primary" type="submit">عرض البيانات</button></p></form>';
+        }
+
+        echo '<section class="olama-section"><div class="olama-section-header"><div><h2 class="olama-section-title">' . esc_html($views[$view]) . '</h2><p class="olama-section-note">السنة الدراسية: ' . esc_html($study_year ?: 'غير متوفرة') . '</p></div></div><div class="olama-table-wrap">';
+        if ('grades' === $view) {
+            $this->simple_table($grades, array('grade_id' => 'رقم الصف', 'grade_name' => 'اسم الصف'));
+        } elseif ('sections' === $view) {
+            $this->simple_table($academic->sections(), array('section_id' => 'رقم الشعبة', 'section_name' => 'اسم الشعبة'));
+        } elseif ('grade_sections' === $view) {
+            $this->simple_table($grade_sections, array('grade_id' => 'رقم الصف', 'grade_name' => 'اسم الصف', 'section_id' => 'رقم الشعبة', 'section_name' => 'اسم الشعبة'));
+        } elseif ('grade_students' === $view) {
+            $this->simple_table($academic->students($study_year, $grade_id), array('family_id' => 'رقم العائلة', 'student_id' => 'رقم الطالب', 'student_name' => 'اسم الطالب', 'grade_name' => 'الصف', 'section_name' => 'الشعبة'));
+        } elseif ('section_students' === $view) {
+            $this->simple_table($academic->students($study_year, $grade_id, $section_id), array('family_id' => 'رقم العائلة', 'student_id' => 'رقم الطالب', 'student_name' => 'اسم الطالب', 'grade_name' => 'الصف', 'section_name' => 'الشعبة'));
+        } else {
+            $this->simple_table($academic->grade_subjects($study_year, $grade_id), array('law_id' => 'رقم القانون', 'grade_id' => 'رقم الصف', 'grade_name' => 'اسم الصف', 'subject_id' => 'رقم المادة', 'subject_name' => 'اسم المادة', 'subject_status_name' => 'الحالة'));
+        }
+        echo '</div></section></div></div>';
+    }
+
+    private function academic_label($name, $id) {
+        $name = trim((string) $name);
+        return '' !== $name ? $name : '#' . $id;
     }
 
     public function health() {

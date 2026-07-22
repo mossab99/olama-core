@@ -625,6 +625,66 @@
     }
 }
 
+.olama-core-admin .olama-academic-actions {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 20px 0;
+}
+
+.olama-core-admin .olama-academic-action {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #d8e3e1;
+    border-radius: 12px;
+    color: #173b38;
+    display: flex;
+    gap: 10px;
+    min-height: 72px;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+.olama-core-admin .olama-academic-action:hover,
+.olama-core-admin .olama-academic-action:focus,
+.olama-core-admin .olama-academic-action.is-active {
+    background: #ecf7f5;
+    border-color: #0f766e;
+    box-shadow: 0 0 0 1px #0f766e;
+    color: #0f5f59;
+}
+
+.olama-core-admin .olama-academic-action .dashicons {
+    font-size: 28px;
+    height: 28px;
+    width: 28px;
+}
+
+.olama-core-admin .olama-academic-filter {
+    align-items: end;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 20px;
+}
+
+.olama-core-admin .olama-academic-filter p {
+    margin: 0;
+}
+
+.olama-core-admin .olama-academic-filter input,
+.olama-core-admin .olama-academic-filter select {
+    max-width: none;
+    width: 100%;
+}
+
+@media (max-width: 782px) {
+    .olama-core-admin .olama-academic-actions,
+    .olama-core-admin .olama-academic-filter {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media print {
     #adminmenumain,
     #wpadminbar,
