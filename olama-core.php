@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Olama Core
  * Description: Clean Oracle-backed core family and student foundation for Olama plugins.
- * Version: 0.5.2
+ * Version: 0.5.3
  * Author: Olama
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('OLAMA_CORE_VERSION', '0.5.2');
+define('OLAMA_CORE_VERSION', '0.5.3');
 define('OLAMA_CORE_FILE', __FILE__);
 define('OLAMA_CORE_PATH', plugin_dir_path(__FILE__));
 define('OLAMA_CORE_URL', plugin_dir_url(__FILE__));
@@ -71,6 +71,14 @@ function olama_core_register_hub_card($cards) {
                 'label' => __('Directory', 'olama-core'),
                 'icon' => 'dashicons-search',
                 'url' => admin_url('admin.php?page=olama-core-directory'),
+                'capability' => 'manage_options',
+                'color' => '#0f766e',
+            ),
+            array(
+                'id' => 'core.employee-360',
+                'label' => __('Employee 360', 'olama-core'),
+                'icon' => 'dashicons-id-alt',
+                'url' => admin_url('admin.php?page=olama-core-employee-360'),
                 'capability' => 'manage_options',
                 'color' => '#0f766e',
             ),

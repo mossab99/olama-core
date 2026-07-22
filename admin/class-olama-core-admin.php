@@ -19,6 +19,7 @@ class Olama_Core_Admin {
         add_action('wp_ajax_olama_core_load_family_card', array($this, 'ajax_load_family_card'));
         add_action('wp_ajax_olama_core_load_student_card', array($this, 'ajax_load_student_card'));
         add_action('wp_ajax_olama_core_load_family_360', array($this, 'ajax_load_family_360'));
+        add_action('wp_ajax_olama_core_load_employee_360', array($this, 'ajax_load_employee_360'));
     }
 
     public function register_menu() {
@@ -26,6 +27,7 @@ class Olama_Core_Admin {
         add_submenu_page('olama-core', 'لوحة التحكم', 'لوحة التحكم', 'manage_options', 'olama-core', array($this, 'dashboard'));
         add_submenu_page('olama-core', 'الدليل', 'الدليل', 'manage_options', 'olama-core-directory', array($this, 'directory'));
         add_submenu_page('olama-core', 'لوحة العائلة 360', 'لوحة العائلة 360', 'manage_options', 'olama-core-family-360', array($this, 'family_360'));
+        add_submenu_page('olama-core', 'لوحة الموظف 360', 'لوحة الموظف 360', 'manage_options', 'olama-core-employee-360', array($this, 'employee_360'));
         add_submenu_page('olama-core', 'بطاقة العائلة', 'بطاقة العائلة', 'manage_options', 'olama-core-family-card', array($this, 'family_card'));
         add_submenu_page('olama-core', 'بطاقة الطالب', 'بطاقة الطالب', 'manage_options', 'olama-core-student-card', array($this, 'student_card'));
         add_submenu_page('olama-core', 'البطاقة المالية', 'البطاقة المالية', 'manage_options', 'olama-core-family-financial-card', array($this, 'family_financial_card'));
@@ -97,6 +99,7 @@ class Olama_Core_Admin {
         echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">روابط تشغيلية</h2></div><div class="olama-actions">';
         $this->render_action_link('فتح الدليل', $this->admin_page_url('olama-core-directory'), 'olama-btn-primary');
         $this->render_action_link('لوحة العائلة 360', $this->family_360_admin_url('olama-core-family-360', 0, $default_study_year), 'olama-btn-secondary');
+        $this->render_action_link('لوحة الموظف 360', $this->admin_page_url('olama-core-employee-360'), 'olama-btn-secondary');
         $this->render_action_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', 0, $default_study_year), 'olama-btn-ghost');
         $this->render_action_link('بطاقة الطالب', $this->admin_page_url('olama-core-student-card', array('study_year' => $default_study_year)), 'olama-btn-ghost');
         $this->render_action_link('المزامنة اليدوية', admin_url('admin.php?page=olama-oracle-sync-manual'), 'olama-btn-ghost');
@@ -681,6 +684,263 @@ class Olama_Core_Admin {
         }
 
         return olama_oracle_sync_refresh_family($family_id, $study_year);
+    }
+
+    public function employee_360() {
+        $employee_id = isset($_GET['employee_id']) ? absint($_GET['employee_id']) : 0;
+        $nonce = wp_create_nonce('olama_core_employee_360');
+
+        echo '<div class="wrap olama-core-admin olama-employee-360-admin" dir="rtl"><div class="olama-page">';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">لوحة الموظف 360</h1>';
+        echo '<p class="olama-page-subtitle">عرض شامل لبيانات الموظف المستوردة من Oracle HR_EMP_CARD مع الحسابات والأدوار المرتبطة محلياً</p></div></header>';
+
+        echo '<form id="olama-employee-360-form" class="olama-filter-card olama-no-print">';
+        echo '<input type="hidden" id="olama_employee_360_nonce" value="' . esc_attr($nonce) . '">';
+        echo '<div class="olama-filter-grid">';
+        echo '<p><label class="olama-label" for="olama_employee_360_employee_id">رقم الموظف</label><input type="number" min="1" step="1" id="olama_employee_360_employee_id" class="regular-text" value="' . esc_attr($employee_id ? $employee_id : '') . '" required></p>';
+        echo '<p><label class="olama-label">مصدر العرض</label><input type="text" class="regular-text" value="النسخة المحفوظة في Olama Core" readonly></p>';
+        echo '<p class="olama-filter-submit">';
+        submit_button('تحميل البيانات', 'primary olama-btn olama-btn-primary', 'submit', false);
+        echo '</p></div></form>';
+
+        echo '<div id="olama-employee-360-message" aria-live="polite"></div>';
+        echo '<div id="olama-employee-360-results" hidden>';
+        echo '<div class="olama-toolbar olama-no-print"><button type="button" class="olama-btn olama-btn-secondary" id="olama-employee-360-print">طباعة</button>';
+        echo '<div class="olama-actions"><a class="olama-btn olama-btn-ghost" href="' . esc_url(admin_url('admin.php?page=olama-oracle-sync-manual')) . '">مزامنة موظفي Oracle</a></div></div>';
+        echo '<div id="olama-employee-360-report"></div></div>';
+        $this->employee_360_assets();
+        echo '</div></div>';
+    }
+
+    public function ajax_load_employee_360() {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'ليس لديك صلاحية لعرض لوحة الموظف 360.'), 403);
+        }
+
+        if (!check_ajax_referer('olama_core_employee_360', 'nonce', false)) {
+            wp_send_json_error(array('message' => 'فشل التحقق الأمني. حدّث الصفحة وحاول مرة أخرى.'), 403);
+        }
+
+        $employee_id = isset($_POST['employee_id']) ? absint($_POST['employee_id']) : 0;
+        if ($employee_id <= 0) {
+            wp_send_json_error(array('message' => 'أدخل رقم موظف صحيحاً.'), 400);
+        }
+
+        $data = $this->core->employees()->get_360($employee_id);
+        if (!$data || empty($data['employee'])) {
+            wp_send_json_error(array('message' => 'لا توجد بيانات محفوظة لهذا الموظف. شغّل مزامنة الموظفين من Oracle أولاً.'), 404);
+        }
+
+        wp_send_json_success(array(
+            'html' => $this->render_employee_360_dashboard($data),
+            'source' => 'olama_core',
+            'last_synced_at' => isset($data['last_synced_at']) ? $data['last_synced_at'] : null,
+        ));
+    }
+
+    private function render_employee_360_dashboard(array $data) {
+        $employee = $data['employee'];
+        $source = !empty($data['source_payload']) && is_array($data['source_payload']) ? $data['source_payload'] : array();
+        $accounts = !empty($data['accounts']) && is_array($data['accounts']) ? $data['accounts'] : array();
+        $transport_roles = !empty($data['transport_roles']) && is_array($data['transport_roles']) ? $data['transport_roles'] : array();
+        $status = $this->family_360_first($employee, array('employee_status'));
+        $gender = $this->employee_360_gender($this->family_360_first($employee, array('gender')));
+        $age = $this->employee_360_years_since($this->family_360_first($employee, array('birth_date')));
+        $service_years = $this->employee_360_years_since($this->family_360_first($employee, array('appointment_date')));
+
+        ob_start();
+        echo '<div class="olama-meta-row">';
+        echo '<span class="olama-meta-item">رقم الموظف: <strong>' . esc_html($employee['employee_id']) . '</strong></span>';
+        echo '<span class="olama-meta-item">المصدر: <strong>Oracle HR_EMP_CARD</strong></span>';
+        echo '<span class="olama-meta-item">آخر مزامنة: <strong>' . esc_html($this->family_360_display($data['last_synced_at'])) . '</strong></span>';
+        echo '<span class="olama-meta-item">الحالة: ' . $this->family_360_badge($status) . '</span>';
+        echo '</div>';
+
+        echo '<div class="olama-grid olama-kpi-grid">';
+        $this->family_360_kpi_cards(array(
+            array('رقم الموظف', $employee['employee_id'], 'number'),
+            array('العمر', $age !== null ? $age . ' سنة' : null),
+            array('مدة الخدمة', $service_years !== null ? $service_years . ' سنة' : null),
+            array('حالة الموظف', $status, 'badge'),
+        ));
+        echo '</div>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">البيانات الشخصية</h2></div>';
+        $this->family_360_info_grid(array(
+            array('الاسم الكامل', $employee['full_name']),
+            array('الرقم الوطني', $employee['national_number'], 'number'),
+            array('تاريخ الميلاد', $employee['birth_date']),
+            array('الجنس', $gender),
+            array('العنوان', $employee['address']),
+            array('أرقام الهاتف', $employee['phones'], 'number'),
+        ));
+        echo '</section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">البيانات الوظيفية</h2></div>';
+        $this->family_360_info_grid(array(
+            array('المسمى الوظيفي', $employee['job_title']),
+            array('تاريخ التعيين', $employee['appointment_date']),
+            array('مدة الخدمة', $service_years !== null ? $service_years . ' سنة' : null),
+            array('حالة الموظف', $status),
+        ));
+        echo '</section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">المؤهلات العلمية</h2></div>';
+        $this->family_360_info_grid(array(
+            array('الدرجة العلمية', $employee['certificate_grade']),
+            array('التخصص / نوع الشهادة', $employee['certificate_type']),
+            array('تاريخ الشهادة', $employee['certificate_date']),
+            array('معدل الشهادة', $employee['certificate_average'], 'number'),
+        ));
+        echo '</section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">حسابات Olama المرتبطة</h2></div>';
+        if (!$accounts) {
+            echo '<div class="olama-empty">لا يوجد حساب ووردبريس مرتبط برقم الموظف.</div>';
+        } else {
+            echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>البريد الإلكتروني</th><th>الهاتف</th><th>الحساب</th></tr></thead><tbody>';
+            foreach ($accounts as $account) {
+                echo '<tr><td>' . esc_html($this->family_360_display($account['display_name'])) . '</td>';
+                echo '<td dir="auto">' . esc_html($this->family_360_display($account['user_login'])) . '</td>';
+                echo '<td dir="auto">' . esc_html($this->family_360_display($account['user_email'])) . '</td>';
+                echo '<td class="olama-number">' . esc_html($this->family_360_display($account['phone_number'])) . '</td>';
+                echo '<td><a class="olama-btn olama-btn-ghost olama-btn-small" href="' . esc_url(get_edit_user_link((int) $account['user_id'])) . '">فتح الحساب</a></td></tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        echo '</section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">أدوار المواصلات</h2></div>';
+        if (!$transport_roles) {
+            echo '<div class="olama-empty">لا يوجد باص مرتبط بهذا الموظف كسائق أو مرافق.</div>';
+        } else {
+            echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr><th>الدور</th><th>رقم الباص</th><th>الوصف</th><th>الموديل</th><th>السعة</th><th>الحالة</th></tr></thead><tbody>';
+            foreach ($transport_roles as $role) {
+                echo '<tr><td>' . esc_html($role['employee_role'] === 'driver' ? 'سائق' : 'مرافق') . '</td>';
+                echo '<td class="olama-number">' . esc_html($this->family_360_display($role['bus_number'])) . '</td>';
+                echo '<td>' . esc_html($this->family_360_display($role['description'])) . '</td>';
+                echo '<td>' . esc_html($this->family_360_display($role['model'])) . '</td>';
+                echo '<td class="olama-number">' . esc_html($this->family_360_display($role['registered_capacity'])) . '</td>';
+                echo '<td>' . $this->family_360_badge(!empty($role['is_active']) ? 'فعال' : 'غير فعال') . '</td></tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        echo '</section>';
+
+        $known_source_fields = array('employee_id', 'full_name', 'national_number', 'birth_date', 'gender', 'job_title', 'appointment_date', 'address', 'phones', 'certificate_grade', 'certificate_type', 'certificate_date', 'certificate_average', 'employee_status');
+        $extra_fields = array_diff_key($source, array_flip($known_source_fields));
+        if ($extra_fields) {
+            echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">حقول إضافية من Oracle</h2></div><div class="olama-info-grid">';
+            foreach ($extra_fields as $key => $value) {
+                if (!is_scalar($value) && $value !== null) {
+                    $value = wp_json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
+                echo '<div class="olama-info-item"><span class="olama-label">' . esc_html($key) . '</span><strong class="olama-value" dir="auto">' . esc_html($this->family_360_display($value)) . '</strong></div>';
+            }
+            echo '</div></section>';
+        }
+
+        return ob_get_clean();
+    }
+
+    private function employee_360_gender($value) {
+        $normalized = strtolower(trim((string) $value));
+        if (in_array($normalized, array('1', 'm', 'male', 'ذكر'), true)) {
+            return 'ذكر';
+        }
+        if (in_array($normalized, array('2', 'f', 'female', 'أنثى', 'انثى'), true)) {
+            return 'أنثى';
+        }
+        return $value;
+    }
+
+    private function employee_360_years_since($date) {
+        if (!$date) {
+            return null;
+        }
+        try {
+            $from = new DateTimeImmutable((string) $date);
+            $today = new DateTimeImmutable(current_time('Y-m-d'));
+            return $from > $today ? null : (int) $from->diff($today)->y;
+        } catch (Exception $exception) {
+            return null;
+        }
+    }
+
+    private function employee_360_assets() {
+        ?>
+        <script>
+        (function() {
+            var form = document.getElementById('olama-employee-360-form');
+            var message = document.getElementById('olama-employee-360-message');
+            var results = document.getElementById('olama-employee-360-results');
+            var report = document.getElementById('olama-employee-360-report');
+            var printButton = document.getElementById('olama-employee-360-print');
+            var submit = form ? form.querySelector('input[type="submit"], button[type="submit"]') : null;
+
+            function clearNode(node) { while (node && node.firstChild) { node.removeChild(node.firstChild); } }
+            function showMessage(type, value) {
+                clearNode(message);
+                if (!value) { return; }
+                var notice = document.createElement('div');
+                notice.className = type === 'error' ? 'olama-error' : (type === 'loading' ? 'olama-loading' : 'olama-success');
+                var p = document.createElement('p');
+                p.textContent = value;
+                notice.appendChild(p);
+                message.appendChild(notice);
+            }
+
+            if (printButton) { printButton.addEventListener('click', function() { window.print(); }); }
+            if (!form) { return; }
+
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+                var employeeId = document.getElementById('olama_employee_360_employee_id').value;
+                if (!employeeId || Number(employeeId) <= 0) {
+                    showMessage('error', 'أدخل رقم موظف صحيحاً.');
+                    return;
+                }
+
+                clearNode(report);
+                results.hidden = true;
+                showMessage('loading', 'جاري تحميل بيانات الموظف...');
+                if (submit) { submit.disabled = true; }
+
+                var body = new URLSearchParams();
+                body.append('action', 'olama_core_load_employee_360');
+                body.append('nonce', document.getElementById('olama_employee_360_nonce').value);
+                body.append('employee_id', employeeId);
+
+                fetch(ajaxurl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+                    body: body.toString()
+                }).then(function(response) {
+                    return response.json().catch(function() { throw new Error('استجابة غير متوقعة من ووردبريس.'); });
+                }).then(function(payload) {
+                    if (!payload || !payload.success) {
+                        throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'تعذر تحميل لوحة الموظف 360.');
+                    }
+                    report.innerHTML = payload.data.html || '';
+                    var synced = payload.data.last_synced_at ? ' — آخر مزامنة: ' + payload.data.last_synced_at : '';
+                    showMessage('success', 'تم عرض النسخة المحفوظة في Olama Core' + synced + '.');
+                    results.hidden = false;
+                }).catch(function(error) {
+                    clearNode(report);
+                    results.hidden = true;
+                    showMessage('error', error.message);
+                }).finally(function() {
+                    if (submit) { submit.disabled = false; }
+                });
+            });
+
+            if (document.getElementById('olama_employee_360_employee_id').value) {
+                form.dispatchEvent(new Event('submit', {cancelable: true}));
+            }
+        })();
+        </script>
+        <?php
     }
 
     public function family_360() {
@@ -1440,7 +1700,7 @@ class Olama_Core_Admin {
         $text = trim((string) $text);
         $lower = strtolower($text);
 
-        if ($text === 'فعال' || $lower === 'active') {
+        if (in_array($text, array('فعال', 'نشط', 'مستمر'), true) || in_array($lower, array('active', 'enabled', 'current'), true)) {
             return 'olama-badge-success';
         }
 

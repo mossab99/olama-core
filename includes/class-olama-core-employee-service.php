@@ -17,6 +17,65 @@ class Olama_Core_Employee_Service {
         return $this->repo->get_row($this->table, array('employee_id' => sanitize_text_field((string) $employee_id)));
     }
 
+    /**
+     * Build the local Employee 360 projection from Oracle-owned employee data
+     * and the Core-owned relationships that reference the employee number.
+     */
+    public function get_360($employee_id) {
+        global $wpdb;
+
+        $employee = $this->get_by_employee_id($employee_id);
+        if (!$employee) {
+            return null;
+        }
+
+        $source_payload = array();
+        if (!empty($employee['raw_json'])) {
+            $decoded = json_decode($employee['raw_json'], true);
+            if (is_array($decoded)) {
+                $source_payload = $decoded;
+            }
+        }
+
+        $accounts = array();
+        $profiles_table = $wpdb->prefix . 'olama_core_staff_profiles';
+        if (Olama_Core_Migrator::table_exists($profiles_table)) {
+            $accounts = $wpdb->get_results($wpdb->prepare(
+                "SELECT u.ID AS user_id, u.user_login, u.display_name, u.user_email, p.phone_number
+                 FROM `{$profiles_table}` p
+                 INNER JOIN `{$wpdb->users}` u ON u.ID = p.user_id
+                 WHERE p.employee_id = %s
+                 ORDER BY u.display_name, u.ID",
+                (string) $employee['employee_id']
+            ), ARRAY_A);
+        }
+
+        $transport_roles = array();
+        $buses_table = $wpdb->prefix . 'olama_core_transport_buses';
+        if (Olama_Core_Migrator::table_exists($buses_table)) {
+            $transport_roles = $wpdb->get_results($wpdb->prepare(
+                "SELECT bus_uid, oracle_bus_id, bus_number, description, model, government_number,
+                        registered_capacity, is_active, last_synced_at,
+                        CASE WHEN driver_employee_id = %s THEN 'driver' ELSE 'companion' END AS employee_role
+                 FROM `{$buses_table}`
+                 WHERE driver_employee_id = %s OR companion_employee_id = %s
+                 ORDER BY is_active DESC, bus_number",
+                (string) $employee['employee_id'],
+                (string) $employee['employee_id'],
+                (string) $employee['employee_id']
+            ), ARRAY_A);
+        }
+
+        return array(
+            'employee' => $employee,
+            'source_payload' => $source_payload,
+            'accounts' => $accounts,
+            'transport_roles' => $transport_roles,
+            'data_source' => 'local',
+            'last_synced_at' => !empty($employee['last_synced_at']) ? $employee['last_synced_at'] : null,
+        );
+    }
+
     public function active($args = array()) {
         global $wpdb;
         $limit = isset($args['limit']) ? max(1, min(1000, absint($args['limit']))) : 1000;
