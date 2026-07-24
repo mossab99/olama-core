@@ -161,6 +161,9 @@ class Olama_Core_Transportation_Service {
             }
             $recipients[] = array(
                 'family_id' => absint($family_id),
+                'family_uid' => (string) ($family['family_uid'] ?? ''),
+                'source_hash' => (string) ($family['source_hash'] ?? ''),
+                'last_synced_at' => isset($matched[0]['last_synced_at']) ? $matched[0]['last_synced_at'] : ($family['last_synced_at'] ?? null),
                 'sponsor_full_name' => isset($family['sponsor_full_name']) ? $family['sponsor_full_name'] : '',
                 'father_name' => isset($family['father_name']) ? $family['father_name'] : '',
                 'father_mobile' => isset($family['father_mobile']) ? $family['father_mobile'] : '',

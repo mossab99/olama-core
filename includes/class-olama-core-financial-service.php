@@ -203,7 +203,16 @@ class Olama_Core_Financial_Service {
     public function query_recipients($study_year, array $filters = array()) {
         global $wpdb;
         $study_year = sanitize_text_field((string) $study_year);
-        $where = array('fy.study_year = %s');
+        $where = array(
+            'fy.study_year = %s',
+            'f.is_active = 1',
+            "EXISTS (
+                SELECT 1 FROM `{$wpdb->prefix}olama_core_student_years` sy
+                WHERE sy.family_uid = fy.family_uid
+                  AND sy.study_year = fy.study_year
+                  AND sy.withdraw_date IS NULL
+            )",
+        );
         $values = array($study_year);
         if (isset($filters['min_balance']) && $filters['min_balance'] !== '') {
             $where[] = 'fy.balance >= %f';
@@ -244,6 +253,9 @@ class Olama_Core_Financial_Service {
             $dues = $this->get_dues($row['oracle_family_id'], $study_year);
             $recipients[] = array(
                 'family_id' => absint($row['oracle_family_id']),
+                'family_uid' => (string) $row['family_uid'],
+                'source_hash' => (string) ($row['source_hash'] ?? ''),
+                'last_synced_at' => $row['last_synced_at'] ?? null,
                 'sponsor_full_name' => $row['sponsor_full_name'],
                 'father_name' => $row['father_name'],
                 'father_mobile' => $row['father_mobile'],
