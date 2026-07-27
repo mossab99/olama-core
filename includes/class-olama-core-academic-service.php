@@ -50,6 +50,7 @@ class Olama_Core_Academic_Service {
         if (!$snapshot['grades'] || !$snapshot['sections']) {
             throw new InvalidArgumentException('Academic snapshot must contain grade and section master data.');
         }
+        $snapshot = $this->scope_snapshot_to_active_students($snapshot);
         $snapshot['grade_subjects'] = $this->deduplicate_grade_subjects($snapshot['grade_subjects']);
 
         $now = current_time('mysql');
@@ -122,6 +123,34 @@ class Olama_Core_Academic_Service {
         return $wpdb->get_results('SELECT * FROM `' . esc_sql($this->grades) . '` ORDER BY CAST(grade_id AS UNSIGNED), grade_id', ARRAY_A);
     }
 
+    /**
+     * Return only grades that have at least one active Oracle student placement
+     * in the requested academic year.
+     *
+     * The grade master contains every grade defined in Oracle, including
+     * dormant definitions that are not used by any student. Operational grade
+     * selectors must therefore be driven by the year-scoped student snapshot.
+     */
+    public function active_grades($study_year) {
+        global $wpdb;
+
+        $study_year = $this->canonical_study_year($study_year);
+        if ('' === $study_year) {
+            return array();
+        }
+
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT g.* FROM `' . esc_sql($this->grades) . '` g
+             INNER JOIN (
+                 SELECT DISTINCT grade_id
+                 FROM `' . esc_sql($this->students) . '`
+                 WHERE study_year = %s
+             ) placements ON placements.grade_id = g.grade_id
+             ORDER BY CAST(g.grade_id AS UNSIGNED), g.grade_id',
+            $study_year
+        ), ARRAY_A);
+    }
+
     public function sections() {
         global $wpdb;
         return $wpdb->get_results('SELECT * FROM `' . esc_sql($this->sections) . '` ORDER BY CAST(section_id AS UNSIGNED), section_id', ARRAY_A);
@@ -155,7 +184,7 @@ class Olama_Core_Academic_Service {
 
     public function grade_subjects($study_year, $grade_id = '') {
         global $wpdb;
-        $sql = 'SELECT * FROM `' . esc_sql($this->grade_subjects) . '` WHERE study_year=%s';
+        $sql = 'SELECT * FROM `' . esc_sql($this->grade_subjects) . '` WHERE study_year=%s AND is_active=1';
         $values = array($this->canonical_study_year($study_year));
         if ('' !== (string) $grade_id) {
             $sql .= ' AND grade_id=%s';
@@ -261,6 +290,69 @@ class Olama_Core_Academic_Service {
         }
         $value = strtolower(trim((string) $row[$key]));
         return in_array($value, array('1', 'true', 'yes', 'active', 'فعال'), true) ? 1 : 0;
+    }
+
+    /**
+     * Scope operational academic data to the exact Oracle IDs referenced by
+     * active student placements for the requested year.
+     *
+     * SCH_CLASSES and SCH_SECTIONS are definition masters and can contain
+     * dormant rows. The snapshot's students collection is the authoritative
+     * projection of SCH_STUDENT_CARD_YEAR for STUDENT_STATUS = 1.
+     */
+    private function scope_snapshot_to_active_students(array $snapshot) {
+        $students = array_values(array_filter($snapshot['students'], function($row) {
+            return is_array($row) && $this->active_student_placement($row);
+        }));
+
+        $grade_ids = array();
+        $section_ids = array();
+        $grade_sections = array();
+        foreach ($students as $student) {
+            $grade_id = $this->text($student, 'grade_id');
+            $section_id = $this->text($student, 'section_id');
+            if ('' === $grade_id) {
+                continue;
+            }
+            $grade_ids[$grade_id] = true;
+            if ('' !== $section_id) {
+                $section_ids[$section_id] = true;
+                $grade_sections[$grade_id . "\0" . $section_id] = true;
+            }
+        }
+
+        $snapshot['students'] = $students;
+        $snapshot['grades'] = array_values(array_filter($snapshot['grades'], function($row) use ($grade_ids) {
+            return is_array($row) && isset($grade_ids[$this->text($row, 'grade_id')]);
+        }));
+        $snapshot['sections'] = array_values(array_filter($snapshot['sections'], function($row) use ($section_ids) {
+            return is_array($row) && isset($section_ids[$this->text($row, 'section_id')]);
+        }));
+        $snapshot['grade_sections'] = array_values(array_filter($snapshot['grade_sections'], function($row) use ($grade_sections) {
+            if (!is_array($row)) {
+                return false;
+            }
+            return isset($grade_sections[$this->text($row, 'grade_id') . "\0" . $this->text($row, 'section_id')]);
+        }));
+        $snapshot['grade_subjects'] = array_values(array_filter($snapshot['grade_subjects'], function($row) use ($grade_ids) {
+            return is_array($row)
+                && isset($grade_ids[$this->text($row, 'grade_id')])
+                && 1 === $this->bool_value($row, 'is_active', 0);
+        }));
+
+        return $snapshot;
+    }
+
+    /**
+     * The Bridge contract already returns active placements. If it includes a
+     * status value, enforce Oracle's documented 1 = continuing student rule.
+     */
+    private function active_student_placement(array $row) {
+        if (!array_key_exists('student_status', $row) || null === $row['student_status'] || '' === trim((string) $row['student_status'])) {
+            return true;
+        }
+        $status = strtolower(trim((string) $row['student_status']));
+        return in_array($status, array('1', 'active', 'continuous', 'continouse'), true);
     }
 
     private function deduplicate_grade_subjects(array $rows) {
