@@ -10,11 +10,18 @@ class Olama_Core_Permissions {
             return;
         }
 
+        self::add_capabilities();
         update_option('olama_core_caps_version', OLAMA_CORE_VERSION);
     }
 
     public static function get_all_capabilities() {
         $groups = array(
+            'academic_context' => array(
+                'label' => __('Academic calendar', 'olama-core'),
+                'caps' => array(
+                    'manage_olama_academic_context' => __('Manage academic years, semesters, and active context', 'olama-core'),
+                ),
+            ),
             'users' => array(
                 'label' => __('Users & Permissions', 'olama-core'),
                 'caps' => array(

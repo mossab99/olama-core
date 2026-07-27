@@ -17,7 +17,11 @@ class Olama_Core_Container {
     private $staff;
     private $employees;
     private $academic;
+    private $academic_calendar;
+    private $academic_context;
+    private $year_closeout;
     private $admin;
+    private $academic_admin;
     private $users_admin;
     private $admin_initialized = false;
 
@@ -45,6 +49,8 @@ class Olama_Core_Container {
             $this->admin_initialized = true;
             $this->admin = new Olama_Core_Admin($this);
             $this->admin->init();
+            $this->academic_admin = new Olama_Core_Academic_Admin($this);
+            $this->academic_admin->init();
             $this->users_admin = new Olama_Core_Users_Admin($this);
             $this->users_admin->init();
         }
@@ -136,5 +142,32 @@ class Olama_Core_Container {
         }
 
         return $this->academic;
+    }
+
+    public function academic_calendar() {
+        if (!$this->academic_calendar) {
+            $this->academic_calendar = new Olama_Core_Academic_Calendar_Service();
+        }
+
+        return $this->academic_calendar;
+    }
+
+    public function academic_context() {
+        if (!$this->academic_context) {
+            $this->academic_context = new Olama_Core_Academic_Context_Service($this->academic_calendar());
+        }
+
+        return $this->academic_context;
+    }
+
+    public function year_closeout() {
+        if (!$this->year_closeout) {
+            $this->year_closeout = new Olama_Core_Year_Closeout_Service(
+                $this->academic_calendar(),
+                $this->academic_context()
+            );
+        }
+
+        return $this->year_closeout;
     }
 }

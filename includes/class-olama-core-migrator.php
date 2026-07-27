@@ -34,7 +34,94 @@ class Olama_Core_Migrator {
         $academic_grade_sections = $wpdb->prefix . 'olama_core_academic_grade_sections';
         $academic_students = $wpdb->prefix . 'olama_core_academic_students';
         $academic_grade_subjects = $wpdb->prefix . 'olama_core_academic_grade_subjects';
+        $academic_years = $wpdb->prefix . 'olama_academic_years';
+        $semesters = $wpdb->prefix . 'olama_semesters';
+        $academic_context = $wpdb->prefix . 'olama_core_academic_context';
+        $year_source_mappings = $wpdb->prefix . 'olama_core_academic_year_source_mappings';
+        $year_archives = $wpdb->prefix . 'olama_core_year_archives';
         $audit_logs = $wpdb->prefix . 'olama_logs';
+
+        // These established table names and IDs are retained because curriculum,
+        // media, exams, and operational plugins already reference them.
+        dbDelta("CREATE TABLE {$academic_years} (
+            id MEDIUMINT(9) NOT NULL AUTO_INCREMENT,
+            code VARCHAR(20) NULL,
+            year_name VARCHAR(50) NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            lifecycle_status VARCHAR(20) NOT NULL DEFAULT 'draft',
+            is_active TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL,
+            PRIMARY KEY (id),
+            KEY code (code),
+            KEY lifecycle_status (lifecycle_status),
+            KEY is_active (is_active)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$semesters} (
+            id MEDIUMINT(9) NOT NULL AUTO_INCREMENT,
+            academic_year_id MEDIUMINT(9) NOT NULL,
+            semester_name VARCHAR(50) NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL,
+            PRIMARY KEY (id),
+            KEY academic_year_id (academic_year_id),
+            KEY is_active (is_active)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$academic_context} (
+            id TINYINT UNSIGNED NOT NULL,
+            academic_year_id MEDIUMINT(9) NOT NULL DEFAULT 0,
+            semester_id MEDIUMINT(9) NOT NULL DEFAULT 0,
+            revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            updated_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at DATETIME NULL,
+            PRIMARY KEY (id),
+            KEY academic_year_id (academic_year_id),
+            KEY semester_id (semester_id)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$year_source_mappings} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            academic_year_id MEDIUMINT(9) NOT NULL,
+            source_system VARCHAR(64) NOT NULL,
+            external_code VARCHAR(50) NOT NULL,
+            created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            updated_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY source_year (source_system, academic_year_id),
+            UNIQUE KEY source_external_code (source_system, external_code),
+            KEY academic_year_id (academic_year_id)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$year_archives} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            academic_year_id MEDIUMINT(9) NOT NULL,
+            year_code VARCHAR(20) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'creating',
+            archive_path TEXT NOT NULL,
+            archive_hash VARCHAR(64) NULL,
+            manifest_json LONGTEXT NULL,
+            total_rows BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            verified_at DATETIME NULL,
+            purged_at DATETIME NULL,
+            restored_at DATETIME NULL,
+            restored_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            KEY academic_year_id (academic_year_id),
+            KEY status (status),
+            KEY created_at (created_at)
+        ) {$charset_collate};");
+
+        self::initialize_academic_context($academic_years, $semesters, $academic_context);
 
         dbDelta("CREATE TABLE {$families} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -544,6 +631,11 @@ class Olama_Core_Migrator {
             $wpdb->prefix . 'olama_core_academic_grade_sections',
             $wpdb->prefix . 'olama_core_academic_students',
             $wpdb->prefix . 'olama_core_academic_grade_subjects',
+            $wpdb->prefix . 'olama_academic_years',
+            $wpdb->prefix . 'olama_semesters',
+            $wpdb->prefix . 'olama_core_academic_context',
+            $wpdb->prefix . 'olama_core_academic_year_source_mappings',
+            $wpdb->prefix . 'olama_core_year_archives',
             $wpdb->prefix . 'olama_logs',
         );
     }
@@ -572,8 +664,74 @@ class Olama_Core_Migrator {
         }
 
         $grade_subjects = $wpdb->prefix . 'olama_core_academic_grade_subjects';
+        $years = $wpdb->prefix . 'olama_academic_years';
+        $context = $wpdb->prefix . 'olama_core_academic_context';
         return (bool) $wpdb->get_var(
             "SHOW COLUMNS FROM `" . esc_sql($grade_subjects) . "` LIKE 'law_id'"
+        ) && (bool) $wpdb->get_var(
+            "SHOW COLUMNS FROM `" . esc_sql($years) . "` LIKE 'code'"
+        ) && (bool) $wpdb->get_var(
+            "SHOW COLUMNS FROM `" . esc_sql($context) . "` LIKE 'revision'"
         );
+    }
+
+    private static function initialize_academic_context($years, $semesters, $context) {
+        global $wpdb;
+
+        $now = current_time('mysql');
+        $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO `" . esc_sql($context) . "`
+             (id, academic_year_id, semester_id, revision, updated_by, updated_at)
+             VALUES (1, 0, 0, 0, 0, %s)",
+            $now
+        ));
+
+        $rows = $wpdb->get_results("SELECT id, year_name, code, is_active FROM `" . esc_sql($years) . "` ORDER BY id ASC");
+        $seen = array();
+        foreach ($rows as $row) {
+            $source = !empty($row->code) ? $row->code : $row->year_name;
+            $code = self::normalize_academic_year_code($source);
+            if ($code === '' || isset($seen[$code])) {
+                continue;
+            }
+            $seen[$code] = (int) $row->id;
+            $wpdb->update($years, array(
+                'code' => $code,
+                'lifecycle_status' => !empty($row->is_active) ? 'open' : 'closed',
+                'updated_at' => $now,
+            ), array('id' => (int) $row->id));
+        }
+
+        $existing = $wpdb->get_row("SELECT academic_year_id, semester_id FROM `" . esc_sql($context) . "` WHERE id = 1");
+        if ($existing && ((int) $existing->academic_year_id > 0 || (int) $existing->semester_id > 0)) {
+            return;
+        }
+
+        $active_years = $wpdb->get_col("SELECT id FROM `" . esc_sql($years) . "` WHERE is_active = 1");
+        if (count($active_years) !== 1) {
+            return;
+        }
+        $year_id = (int) $active_years[0];
+        $active_semesters = $wpdb->get_col($wpdb->prepare(
+            "SELECT id FROM `" . esc_sql($semesters) . "` WHERE academic_year_id = %d AND is_active = 1",
+            $year_id
+        ));
+        if (count($active_semesters) !== 1) {
+            return;
+        }
+
+        $wpdb->update($context, array(
+            'academic_year_id' => $year_id,
+            'semester_id' => (int) $active_semesters[0],
+            'revision' => 1,
+            'updated_at' => $now,
+        ), array('id' => 1));
+    }
+
+    private static function normalize_academic_year_code($value) {
+        if (preg_match('/(\d{4})\D*(\d{4})/', (string) $value, $matches)) {
+            return $matches[1] . '-' . $matches[2];
+        }
+        return sanitize_text_field(trim((string) $value));
     }
 }

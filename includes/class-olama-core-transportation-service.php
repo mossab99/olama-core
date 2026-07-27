@@ -15,7 +15,7 @@ class Olama_Core_Transportation_Service {
         global $wpdb;
 
         $family_id = sanitize_text_field((string) $family_id);
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         if ($family_id === '' || $study_year === '') {
             throw new InvalidArgumentException('Family number and study year are required.');
         }
@@ -96,7 +96,7 @@ class Olama_Core_Transportation_Service {
             "SELECT tr.*, st.student_name, sy.school_id, sy.school_name, sy.class_id AS year_class_id, sy.class_name AS year_class_name, sy.section_id AS year_section_id, sy.section_name AS year_section_name FROM `{$this->table}` tr LEFT JOIN `{$wpdb->prefix}olama_core_students` st ON st.student_uid = tr.student_uid LEFT JOIN `{$wpdb->prefix}olama_core_student_years` sy ON sy.student_uid = tr.student_uid AND sy.study_year = tr.study_year WHERE (tr.oracle_family_id = %s OR (tr.oracle_family_id IS NULL AND tr.family_id = %d)) AND tr.study_year = %s ORDER BY tr.student_id ASC, tr.id ASC",
             sanitize_text_field((string) $family_id),
             absint($family_id),
-            sanitize_text_field((string) $study_year)
+            $this->canonical_study_year($study_year)
         ), ARRAY_A);
         foreach ($rows as &$row) {
             if (empty($row['last_synced_at']) && !empty($row['synced_at'])) {
@@ -126,7 +126,7 @@ class Olama_Core_Transportation_Service {
 
     public function get_options($study_year) {
         global $wpdb;
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         return array(
             'classes' => $wpdb->get_results($wpdb->prepare("SELECT class_id, MAX(class_name) AS class_name FROM `{$this->table}` WHERE study_year = %s AND class_id IS NOT NULL AND class_id <> '' GROUP BY class_id ORDER BY class_name", $study_year), ARRAY_A),
             'sections' => $wpdb->get_results($wpdb->prepare("SELECT class_id, section_id, MAX(section_name) AS section_name FROM `{$this->table}` WHERE study_year = %s AND section_id IS NOT NULL AND section_id <> '' GROUP BY class_id, section_id ORDER BY section_name", $study_year), ARRAY_A),
@@ -138,7 +138,7 @@ class Olama_Core_Transportation_Service {
 
     public function query_recipients($study_year, array $filters = array()) {
         global $wpdb;
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         $ids = $wpdb->get_col($wpdb->prepare(
             "SELECT DISTINCT COALESCE(NULLIF(oracle_family_id, ''), family_id) FROM `{$this->table}` WHERE study_year = %s AND (is_active IS NULL OR is_active = 1) ORDER BY family_id",
             $study_year
@@ -200,6 +200,19 @@ class Olama_Core_Transportation_Service {
             $out[] = $family;
         }
         return $out;
+    }
+
+    private function canonical_study_year($value) {
+        $value = sanitize_text_field((string) $value);
+        if ($value === '' || !function_exists('olama_core')) {
+            return '';
+        }
+        $calendar = olama_core()->academic_calendar();
+        $year = $calendar->resolve_external_year('oracle', $value);
+        if (!$year) {
+            throw new InvalidArgumentException('Study year is not mapped to an Olama Core academic year.');
+        }
+        return $calendar->canonical_year_code((int) $year->id);
     }
 
     private function filter_rows(array $rows, array $filters) {

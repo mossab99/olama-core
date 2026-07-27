@@ -13,6 +13,7 @@ class Olama_Core_Admin {
 
     public function init() {
         add_action('admin_menu', array($this, 'register_menu'));
+        add_action('admin_menu', array($this, 'register_health_menu'), 20);
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_action('wp_ajax_olama_core_load_family_financial_card', array($this, 'ajax_load_family_financial_card'));
         add_action('wp_ajax_olama_core_load_family_transportation_card', array($this, 'ajax_load_family_transportation_card'));
@@ -23,21 +24,25 @@ class Olama_Core_Admin {
     }
 
     public function register_menu() {
-        add_menu_page('Olama Core', 'Olama Core', 'olama_access_users_mgmt', 'olama-core', array($this, 'dashboard'), 'dashicons-database-view', 56);
-        add_submenu_page('olama-core', 'لوحة التحكم', 'لوحة التحكم', 'manage_options', 'olama-core', array($this, 'dashboard'));
-        add_submenu_page('olama-core', 'الدليل', 'الدليل', 'manage_options', 'olama-core-directory', array($this, 'directory'));
-        add_submenu_page('olama-core', 'Academic Info', 'Academic Info', 'manage_options', 'olama-core-academic-info', array($this, 'academic_info'));
-        add_submenu_page('olama-core', 'لوحة العائلة 360', 'لوحة العائلة 360', 'manage_options', 'olama-core-family-360', array($this, 'family_360'));
-        add_submenu_page('olama-core', 'لوحة الموظف 360', 'لوحة الموظف 360', 'manage_options', 'olama-core-employee-360', array($this, 'employee_360'));
-        add_submenu_page('olama-core', 'بطاقة العائلة', 'بطاقة العائلة', 'manage_options', 'olama-core-family-card', array($this, 'family_card'));
-        add_submenu_page('olama-core', 'بطاقة الطالب', 'بطاقة الطالب', 'manage_options', 'olama-core-student-card', array($this, 'student_card'));
-        add_submenu_page('olama-core', 'البطاقة المالية', 'البطاقة المالية', 'manage_options', 'olama-core-family-financial-card', array($this, 'family_financial_card'));
-        add_submenu_page('olama-core', 'بطاقة المواصلات', 'بطاقة المواصلات', 'manage_options', 'olama-core-family-transportation-card', array($this, 'family_transportation_card'));
-        add_submenu_page('olama-core', 'الصحة', 'الصحة', 'manage_options', 'olama-core-health', array($this, 'health'));
-
+        add_menu_page('Olama Core', 'Olama Core', 'manage_options', 'olama-core', array($this, 'dashboard'), 'dashicons-database-view', 56);
+        add_submenu_page('olama-core', 'نظرة عامة', 'نظرة عامة', 'manage_options', 'olama-core', array($this, 'dashboard'), 1);
+        add_submenu_page('olama-core', 'مستكشف البيانات', 'مستكشف البيانات', 'manage_options', 'olama-core-directory', array($this, 'directory'), 2);
+        add_submenu_page('olama-core', 'الملفات الشاملة', 'الملفات الشاملة', 'manage_options', 'olama-core-profiles', array($this, 'profiles'), 3);
+        // Contextual and legacy routes remain available without crowding the visible submenu.
+        add_submenu_page(null, 'البيانات الأكاديمية', 'البيانات الأكاديمية', 'manage_options', 'olama-core-academic-info', array($this, 'academic_info'));
+        add_submenu_page(null, 'لوحة العائلة 360', 'لوحة العائلة 360', 'manage_options', 'olama-core-family-360', array($this, 'family_360'));
+        add_submenu_page(null, 'لوحة الموظف 360', 'لوحة الموظف 360', 'manage_options', 'olama-core-employee-360', array($this, 'employee_360'));
+        add_submenu_page(null, 'بطاقة العائلة', 'بطاقة العائلة', 'manage_options', 'olama-core-family-card', array($this, 'family_card'));
+        add_submenu_page(null, 'بطاقة الطالب', 'بطاقة الطالب', 'manage_options', 'olama-core-student-card', array($this, 'student_card'));
+        add_submenu_page(null, 'البطاقة المالية', 'البطاقة المالية', 'manage_options', 'olama-core-family-financial-card', array($this, 'family_financial_card'));
+        add_submenu_page(null, 'بطاقة المواصلات', 'بطاقة المواصلات', 'manage_options', 'olama-core-family-transportation-card', array($this, 'family_transportation_card'));
         add_submenu_page(null, 'العائلات', 'العائلات', 'manage_options', 'olama-core-families', array($this, 'families'));
         add_submenu_page(null, 'الطلاب', 'الطلاب', 'manage_options', 'olama-core-students', array($this, 'students'));
         add_submenu_page(null, 'سنوات الطلاب', 'سنوات الطلاب', 'manage_options', 'olama-core-student-years', array($this, 'student_years'));
+    }
+
+    public function register_health_menu() {
+        add_submenu_page('olama-core', 'صحة النظام', 'صحة النظام', 'manage_options', 'olama-core-health', array($this, 'health'));
     }
 
     public function enqueue_admin_assets($hook_suffix) {
@@ -66,22 +71,29 @@ class Olama_Core_Admin {
         $default_study_year = $this->oracle_default_study_year();
 
         echo '<div class="wrap olama-core-admin" dir="rtl"><div class="olama-page">';
-        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">لوحة تحكم Olama Core</h1>';
-        echo '<p class="olama-page-subtitle">ملخص تشغيلي لبيانات العائلات والطلاب والمزامنة مع نظام Oracle ERP</p></div></header>';
+        $current_context = $this->core->academic_context()->current();
+        $employee_count = $this->core->employees()->count();
+        $context_label = $current_context
+            ? trim(($current_context->study_year ?: $current_context->year_name) . ' — ' . $current_context->semester_name)
+            : 'غير محدد';
+
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">نظرة عامة على Olama Core</h1>';
+        echo '<p class="olama-page-subtitle">المصدر التشغيلي المحلي المشترك لبيانات الأشخاص والسجل الأكاديمي والبيانات المالية والمواصلات في منظومة Olama.</p></div>';
+        echo '<div class="olama-header-status"><span class="olama-label">السياق الأكاديمي الحالي</span><strong>' . esc_html($context_label) . '</strong></div></header>';
 
         if ($incomplete) {
             echo '<div class="olama-warning"><p>تنبيه: قائمة الطلاب أو سنوات الطلاب قد تكون غير مكتملة. يتم عرض السجلات المحلية المتزامنة فقط.</p></div>';
         }
 
-        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">الملخص العام</h2></div>';
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">المشهد التشغيلي</h2></div>';
         echo '<div class="olama-grid olama-kpi-grid">';
         $this->render_kpi('عدد العائلات', $counts['families'], true);
         $this->render_kpi('عدد الطلاب', $counts['students'], false);
-        $this->render_kpi('عدد سجلات السنوات الدراسية', $counts['student_years'], false);
+        $this->render_kpi('سجلات الالتحاق', $counts['student_years'], false);
+        $this->render_kpi('عدد الموظفين', $employee_count, false);
         $this->render_kpi('آخر مزامنة', $this->display_value($last_sync['latest']), false);
-        $this->render_kpi('العائلات النشطة', $counts['active_families'], false);
-        $this->render_kpi('الطلاب النشطون', $counts['active_students'], false);
-        $this->render_kpi('حالة البيانات', $incomplete ? 'تحتاج مراجعة' : 'طبيعية', $incomplete);
+        $this->render_kpi('السياق الأكاديمي', $context_label, false);
+        $this->render_kpi('حالة البيانات', $incomplete ? 'تحتاج مراجعة' : 'مستقرة', $incomplete);
         echo '</div></section>';
 
         echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">البحث السريع</h2></div>';
@@ -97,13 +109,11 @@ class Olama_Core_Admin {
         echo '<p class="olama-filter-submit"><button type="submit" class="olama-btn olama-btn-primary">بحث</button></p>';
         echo '</div></form></section>';
 
-        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">روابط تشغيلية</h2></div><div class="olama-actions">';
-        $this->render_action_link('فتح الدليل', $this->admin_page_url('olama-core-directory'), 'olama-btn-primary');
-        $this->render_action_link('Academic Info', $this->admin_page_url('olama-core-academic-info'), 'olama-btn-secondary');
-        $this->render_action_link('لوحة العائلة 360', $this->family_360_admin_url('olama-core-family-360', 0, $default_study_year), 'olama-btn-secondary');
-        $this->render_action_link('لوحة الموظف 360', $this->admin_page_url('olama-core-employee-360'), 'olama-btn-secondary');
-        $this->render_action_link('بطاقة العائلة', $this->family_360_admin_url('olama-core-family-card', 0, $default_study_year), 'olama-btn-ghost');
-        $this->render_action_link('بطاقة الطالب', $this->admin_page_url('olama-core-student-card', array('study_year' => $default_study_year)), 'olama-btn-ghost');
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">المهام الرئيسية</h2></div><div class="olama-actions">';
+        $this->render_action_link('استكشاف البيانات', $this->admin_page_url('olama-core-directory'), 'olama-btn-primary');
+        $this->render_action_link('فتح ملف شامل', $this->admin_page_url('olama-core-profiles'), 'olama-btn-secondary');
+        $this->render_action_link('الإدارة الأكاديمية', $this->admin_page_url('olama-core-academic-calendar'), 'olama-btn-secondary');
+        $this->render_action_link('صحة النظام', $this->admin_page_url('olama-core-health'), 'olama-btn-ghost');
         $this->render_action_link('المزامنة اليدوية', admin_url('admin.php?page=olama-oracle-sync-manual'), 'olama-btn-ghost');
         echo '</div></section>';
 
@@ -135,7 +145,7 @@ class Olama_Core_Admin {
 
     public function directory() {
         $tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : $this->quick_search_default_tab();
-        $valid_tabs = array('families', 'students', 'student_years');
+        $valid_tabs = array('families', 'students', 'student_years', 'employees');
         if (!in_array($tab, $valid_tabs, true)) {
             $tab = $this->quick_search_default_tab();
         }
@@ -143,8 +153,9 @@ class Olama_Core_Admin {
         $counts = $this->directory_counts();
 
         echo '<div class="wrap olama-core-admin" dir="rtl"><div class="olama-page">';
-        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">الدليل</h1>';
-        echo '<p class="olama-page-subtitle">بحث واستعراض العائلات والطلاب وسنوات الطلاب من البيانات المحلية المتزامنة مع Oracle ERP</p></div></header>';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">مستكشف البيانات</h1>';
+        echo '<p class="olama-page-subtitle">استعراض البيانات التشغيلية المحلية التي يملكها Olama Core، مع الوصول السياقي إلى الملفات الشاملة والبيانات الأكاديمية.</p></div>';
+        echo '<div class="olama-actions"><a class="olama-btn olama-btn-secondary" href="' . esc_url($this->admin_page_url('olama-core-profiles')) . '">الملفات الشاملة</a></div></header>';
 
         if ($this->local_data_looks_incomplete($counts)) {
             echo '<div class="olama-warning"><p>تنبيه: هذه الصفحة تعرض البيانات المتزامنة محلياً فقط، وقد تكون قائمة الطلاب أو سنوات الطلاب غير مكتملة حتى تكتمل عملية المزامنة.</p></div>';
@@ -162,6 +173,8 @@ class Olama_Core_Admin {
             $this->render_students_directory_tab($counts);
         } elseif ('student_years' === $tab) {
             $this->render_student_years_directory_tab($counts);
+        } elseif ('employees' === $tab) {
+            $this->render_employees_directory_tab();
         } else {
             $this->render_families_directory_tab();
         }
@@ -263,16 +276,63 @@ class Olama_Core_Admin {
         $tabs = array(
             'families' => 'العائلات',
             'students' => 'الطلاب',
-            'student_years' => 'سنوات الطلاب',
+            'student_years' => 'الالتحاق والسنوات',
+            'employees' => 'الموظفون',
         );
 
-        echo '<nav class="olama-tabs" aria-label="أقسام الدليل">';
+        echo '<nav class="olama-tabs" aria-label="أقسام مستكشف البيانات">';
         foreach ($tabs as $tab => $label) {
             $url = add_query_arg(array('page' => 'olama-core-directory', 'tab' => $tab), admin_url('admin.php'));
             $class = 'olama-tab' . ($tab === $active_tab ? ' is-active' : '');
             echo '<a class="' . esc_attr($class) . '" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
         }
+        echo '<a class="olama-tab" href="' . esc_url($this->admin_page_url('olama-core-academic-info')) . '">البنية الأكاديمية</a>';
         echo '</nav>';
+    }
+
+    private function render_employees_directory_tab() {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'olama_core_employees';
+        $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $where = '';
+        $values = array();
+        if ('' !== $search) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where = ' WHERE employee_id LIKE %s OR full_name LIKE %s OR national_number LIKE %s OR job_title LIKE %s';
+            $values = array($like, $like, $like, $like);
+        }
+
+        $total_sql = 'SELECT COUNT(*) FROM `' . esc_sql($table) . '`' . $where;
+        $total = (int) $wpdb->get_var($values ? $wpdb->prepare($total_sql, $values) : $total_sql);
+        $limit = $this->directory_per_page();
+        $offset = $this->directory_offset($limit);
+        $query_values = array_merge($values, array($limit, $offset));
+        $rows = $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($table) . '`' . $where . ' ORDER BY CAST(employee_id AS UNSIGNED), employee_id LIMIT %d OFFSET %d',
+            $query_values
+        ), ARRAY_A);
+
+        echo '<form class="olama-filter-card" method="get" action="' . esc_url(admin_url('admin.php')) . '"><input type="hidden" name="page" value="olama-core-directory"><input type="hidden" name="tab" value="employees">';
+        echo '<div class="olama-filter-grid"><p><label class="olama-label" for="olama-employee-search">بحث الموظفين</label><input class="regular-text" id="olama-employee-search" type="search" name="s" value="' . esc_attr($search) . '" placeholder="الرقم أو الاسم أو المسمى الوظيفي"></p>';
+        echo '<p></p><p class="olama-filter-submit"><button class="olama-btn olama-btn-primary" type="submit">بحث</button></p></div></form>';
+        $this->render_directory_pagination('employees', $total, $limit);
+        echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr><th>رقم الموظف</th><th>الاسم الكامل</th><th>المسمى الوظيفي</th><th>أرقام الهاتف</th><th>الحالة</th><th>آخر مزامنة</th><th>الإجراء</th></tr></thead><tbody>';
+        if (!$rows) {
+            echo '<tr><td colspan="7"><div class="olama-empty"><p>لا توجد سجلات مطابقة.</p></div></td></tr>';
+        }
+        foreach ($rows as $row) {
+            $employee_id = isset($row['employee_id']) ? $row['employee_id'] : '';
+            echo '<tr><td class="olama-number">' . esc_html($this->display_value($employee_id)) . '</td>';
+            echo '<td>' . esc_html($this->display_value($row['full_name'] ?? '')) . '</td>';
+            echo '<td>' . esc_html($this->display_value($row['job_title'] ?? '')) . '</td>';
+            echo '<td class="olama-number">' . esc_html($this->display_value($row['phones'] ?? '')) . '</td>';
+            echo '<td>' . $this->status_badge($row['employee_status'] ?? '') . '</td>';
+            echo '<td>' . esc_html($this->display_date($row['last_synced_at'] ?? '', true)) . '</td>';
+            echo '<td><a class="olama-btn olama-btn-ghost olama-btn-small" href="' . esc_url(add_query_arg(array('page' => 'olama-core-employee-360', 'employee_id' => $employee_id), admin_url('admin.php'))) . '">فتح الملف</a></td></tr>';
+        }
+        echo '</tbody></table></div>';
+        $this->render_directory_pagination('employees', $total, $limit);
     }
 
     private function render_families_directory_tab() {
@@ -711,6 +771,36 @@ class Olama_Core_Admin {
         echo '<div class="olama-actions"><a class="olama-btn olama-btn-ghost" href="' . esc_url(admin_url('admin.php?page=olama-oracle-sync-manual')) . '">مزامنة موظفي Oracle</a></div></div>';
         echo '<div id="olama-employee-360-report"></div></div>';
         $this->employee_360_assets();
+        echo '</div></div>';
+    }
+
+    public function profiles() {
+        $study_year = $this->oracle_default_study_year();
+
+        echo '<div class="wrap olama-core-admin" dir="rtl"><div class="olama-page">';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">الملفات الشاملة</h1>';
+        echo '<p class="olama-page-subtitle">نقطة دخول موحدة إلى ملف العائلة والطالب والموظف. تظهر البطاقات التفصيلية والمالية والمواصلات داخل سياق الملف بدلاً من عرضها كأقسام منفصلة في القائمة.</p></div></header>';
+        echo '<div class="olama-profile-grid">';
+
+        echo '<section class="olama-profile-entry"><span class="dashicons dashicons-groups"></span><div><h2>ملف العائلة 360</h2><p>العائلة والطلاب والملخص المالي والمواصلات في عرض واحد.</p></div>';
+        echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '"><input type="hidden" name="page" value="olama-core-family-360">';
+        echo '<label class="olama-label" for="olama-profile-family">رقم العائلة</label><input id="olama-profile-family" name="family_id" type="number" min="1" required>';
+        echo '<input type="hidden" name="study_year" value="' . esc_attr($study_year) . '"><button class="olama-btn olama-btn-primary" type="submit">فتح الملف</button></form></section>';
+
+        echo '<section class="olama-profile-entry"><span class="dashicons dashicons-welcome-learn-more"></span><div><h2>بطاقة الطالب</h2><p>البيانات الشخصية والالتحاق والسجل الأكاديمي والمواصلات.</p></div>';
+        echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '"><input type="hidden" name="page" value="olama-core-student-card">';
+        echo '<label class="olama-label" for="olama-profile-student-family">رقم العائلة</label><input id="olama-profile-student-family" name="family_id" type="number" min="1" required>';
+        echo '<label class="olama-label" for="olama-profile-student">رقم الطالب</label><input id="olama-profile-student" name="student_id" type="number" min="1" required>';
+        echo '<input type="hidden" name="study_year" value="' . esc_attr($study_year) . '"><button class="olama-btn olama-btn-primary" type="submit">فتح الملف</button></form></section>';
+
+        echo '<section class="olama-profile-entry"><span class="dashicons dashicons-id-alt"></span><div><h2>ملف الموظف 360</h2><p>بيانات الموارد البشرية والحسابات والأدوار المحلية المرتبطة.</p></div>';
+        echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '"><input type="hidden" name="page" value="olama-core-employee-360">';
+        echo '<label class="olama-label" for="olama-profile-employee">رقم الموظف</label><input id="olama-profile-employee" name="employee_id" type="number" min="1" required>';
+        echo '<button class="olama-btn olama-btn-primary" type="submit">فتح الملف</button></form></section>';
+
+        echo '</div>';
+        echo '<section class="olama-section olama-profile-help"><div class="olama-section-header"><h2 class="olama-section-title">طرق أخرى للوصول</h2></div>';
+        echo '<p>يمكن فتح الملفات أيضاً من نتائج <a href="' . esc_url($this->admin_page_url('olama-core-directory')) . '">مستكشف البيانات</a>. تبقى روابط البطاقات القديمة والطباعة صالحة للأنظمة والإشارات المرجعية الحالية.</p></section>';
         echo '</div></div>';
     }
 
@@ -1718,12 +1808,13 @@ class Olama_Core_Admin {
     }
 
     private function oracle_default_study_year() {
-        if (!function_exists('olama_oracle_sync_get_api_config')) {
+        $year = $this->core->academic_context()->current_year();
+        if (!$year) {
             return '';
         }
 
-        $config = olama_oracle_sync_get_api_config();
-        return isset($config['default_study_year']) ? sanitize_text_field($config['default_study_year']) : '';
+        $value = !empty($year->code) ? $year->code : $year->year_name;
+        return sanitize_text_field((string) $value);
     }
 
     private function family_360_assets($oracle_available) {
@@ -3551,7 +3642,7 @@ class Olama_Core_Admin {
         if (!isset($views[$view])) {
             $view = 'grades';
         }
-        $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $academic->latest_study_year();
+        $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : $this->oracle_default_study_year();
         $grade_id = isset($_GET['grade_id']) ? sanitize_text_field(wp_unslash($_GET['grade_id'])) : '';
         $section_id = isset($_GET['section_id']) ? sanitize_text_field(wp_unslash($_GET['section_id'])) : '';
         $grades = $academic->grades();
@@ -3570,9 +3661,9 @@ class Olama_Core_Admin {
         }
 
         echo '<div class="wrap olama-core-admin olama-academic-admin" dir="rtl"><div class="olama-page">';
-        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">Academic Info</h1>';
-        echo '<p class="olama-page-subtitle">بيانات أكاديمية محفوظة محلياً في Olama Core. تتم الكتابة بواسطة Oracle Sync فقط، وتقرأ إضافات Olama من جداول Core.</p></div>';
-        echo '<div class="olama-actions"><a class="olama-btn olama-btn-secondary" href="' . esc_url(admin_url('admin.php?page=olama-oracle-sync')) . '">فتح Oracle Sync</a></div></header>';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">البنية الأكاديمية</h1>';
+        echo '<p class="olama-page-subtitle">استعراض الصفوف والشعب والطلاب والمواد الأكاديمية المحفوظة محلياً في Olama Core. تتم الكتابة بواسطة Oracle Sync فقط.</p></div>';
+        echo '<div class="olama-actions"><a class="olama-btn olama-btn-ghost" href="' . esc_url($this->admin_page_url('olama-core-directory')) . '">مستكشف البيانات</a><a class="olama-btn olama-btn-secondary" href="' . esc_url(admin_url('admin.php?page=olama-oracle-sync')) . '">فتح Oracle Sync</a></div></header>';
 
         echo '<div class="olama-academic-actions">';
         foreach ($views as $key => $label) {
@@ -3636,19 +3727,52 @@ class Olama_Core_Admin {
     public function health() {
         global $wpdb, $wp_version;
 
-        echo '<div class="wrap"><h1>Olama Core Health</h1>';
-        echo '<table class="widefat striped"><tbody>';
-        echo '<tr><th>Plugin active</th><td>Yes</td></tr>';
-        echo '<tr><th>Plugin version</th><td>' . esc_html(OLAMA_CORE_VERSION) . '</td></tr>';
-        echo '<tr><th>WordPress version</th><td>' . esc_html($wp_version) . '</td></tr>';
-        echo '<tr><th>PHP version</th><td>' . esc_html(PHP_VERSION) . '</td></tr>';
-        echo '<tr><th>Current DB version</th><td>' . esc_html(get_option('olama_core_db_version', 'Not set')) . '</td></tr>';
-        foreach (Olama_Core_Migrator::required_tables() as $table) {
+        $tables = Olama_Core_Migrator::required_tables();
+        $existing_count = 0;
+        foreach ($tables as $table) {
+            if (Olama_Core_Migrator::table_exists($table)) {
+                $existing_count++;
+            }
+        }
+        $missing_count = count($tables) - $existing_count;
+        $context = $this->core->academic_context()->current();
+        $last_sync = $this->last_sync_summary();
+        $system_status = $missing_count ? 'يحتاج تدخلاً' : ($last_sync['latest'] ? 'جاهز' : 'يحتاج مزامنة');
+
+        echo '<div class="wrap olama-core-admin olama-health-admin" dir="rtl"><div class="olama-page">';
+        echo '<header class="olama-page-header"><div><h1 class="olama-page-title">صحة النظام</h1>';
+        echo '<p class="olama-page-subtitle">تشخيص موحد لحالة مخزن البيانات والسياق الأكاديمي والتكاملات التي يعتمد عليها Olama Core.</p></div>';
+        echo '<div class="olama-health-state ' . ($missing_count ? 'is-critical' : 'is-ready') . '"><span>الحالة العامة</span><strong>' . esc_html($system_status) . '</strong></div></header>';
+
+        echo '<div class="olama-grid olama-kpi-grid">';
+        $this->render_kpi('إصدار Core', OLAMA_CORE_VERSION, true);
+        $this->render_kpi('الجداول الجاهزة', $existing_count . ' / ' . count($tables));
+        $this->render_kpi('الجداول المفقودة', $missing_count);
+        $this->render_kpi('آخر مزامنة', $this->display_value($last_sync['latest']));
+        echo '</div>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><h2 class="olama-section-title">السياق والتكاملات</h2></div><div class="olama-health-grid">';
+        $this->render_health_item('السياق الأكاديمي', $context ? (($context->study_year ?: $context->year_name) . ' — ' . $context->semester_name) : 'غير مهيأ', (bool) $context);
+        $this->render_health_item('Oracle Sync', function_exists('olama_oracle_sync_api_get') ? 'متاح' : 'غير متاح', function_exists('olama_oracle_sync_api_get'));
+        $this->render_health_item('إصدار قاعدة البيانات', (string) get_option('olama_core_db_version', 'غير محدد'), get_option('olama_core_db_version') === OLAMA_CORE_VERSION);
+        $this->render_health_item('بيئة التشغيل', 'WordPress ' . $wp_version . ' / PHP ' . PHP_VERSION, true);
+        echo '</div><div class="olama-section-actions">';
+        $this->render_action_link('فتح Oracle Sync', admin_url('admin.php?page=olama-oracle-sync'), 'olama-btn-secondary');
+        $this->render_action_link('الإدارة الأكاديمية', $this->admin_page_url('olama-core-academic-calendar'), 'olama-btn-ghost');
+        echo '</div></section>';
+
+        echo '<section class="olama-section"><div class="olama-section-header"><div><h2 class="olama-section-title">مخزن البيانات</h2><p class="olama-section-note">تعرض التفاصيل التقنية هنا للتشخيص فقط؛ تعديل البيانات يتم عبر الخدمة المالكة والمزامنة.</p></div></div>';
+        echo '<div class="olama-table-wrap"><table class="olama-table olama-health-table"><thead><tr><th>الجدول</th><th>الحالة</th><th>عدد السجلات</th></tr></thead><tbody>';
+        foreach ($tables as $table) {
             $exists = Olama_Core_Migrator::table_exists($table);
             $count = $exists ? (int) $wpdb->get_var('SELECT COUNT(*) FROM `' . esc_sql($table) . '`') : 0;
-            echo '<tr><th>' . esc_html($table) . '</th><td>' . esc_html($exists ? 'Exists, rows: ' . $count : 'Missing') . '</td></tr>';
+            echo '<tr><td><code>' . esc_html($table) . '</code></td><td>' . $this->status_badge($exists ? 'جاهز' : 'مفقود') . '</td><td class="olama-number">' . esc_html(number_format_i18n($count)) . '</td></tr>';
         }
-        echo '</tbody></table></div>';
+        echo '</tbody></table></div></section></div></div>';
+    }
+
+    private function render_health_item($label, $value, $healthy) {
+        echo '<div class="olama-health-item"><span class="olama-health-dot ' . ($healthy ? 'is-good' : 'is-warning') . '"></span><div><span class="olama-label">' . esc_html($label) . '</span><strong>' . esc_html($this->display_value($value)) . '</strong></div></div>';
     }
 
     private function stat_cards($stats) {

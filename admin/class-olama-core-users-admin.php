@@ -18,7 +18,7 @@ class Olama_Core_Users_Admin {
 
     public function register_menu() {
         add_submenu_page(
-            'olama-core',
+            null,
             __('Users & Permissions', 'olama-core'),
             __('Users & Permissions', 'olama-core'),
             'olama_access_users_mgmt',

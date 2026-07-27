@@ -19,7 +19,7 @@ class Olama_Core_Financial_Service {
         global $wpdb;
 
         $family_id = $this->required_text($data, array('oracle_family_id', 'family_id'), 'Missing family number.');
-        $study_year = $this->required_text($data, array('study_year'), 'Missing study year.');
+        $study_year = $this->canonical_study_year($this->required_text($data, array('study_year'), 'Missing study year.'));
         $family_uid = 'ORA-FAM-' . $family_id;
         $begin_debit = $this->money($data, array('begin_debit', 'begin_dr'));
         $begin_credit = $this->money($data, array('begin_credit', 'begin_cr'));
@@ -72,7 +72,7 @@ class Olama_Core_Financial_Service {
         global $wpdb;
 
         $family_id = sanitize_text_field((string) $family_id);
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         if ($family_id === '' || $study_year === '') {
             throw new InvalidArgumentException('Family number and study year are required.');
         }
@@ -114,7 +114,7 @@ class Olama_Core_Financial_Service {
 
     public function replace_transactions_from_source($family_id, $study_year, array $rows) {
         $family_id = sanitize_text_field((string) $family_id);
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         if ($family_id === '' || $study_year === '') {
             throw new InvalidArgumentException('Family number and study year are required.');
         }
@@ -160,7 +160,7 @@ class Olama_Core_Financial_Service {
         return $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM `{$this->summary_table}` WHERE oracle_family_id = %s AND study_year = %s LIMIT 1",
             sanitize_text_field((string) $family_id),
-            sanitize_text_field((string) $study_year)
+            $this->canonical_study_year($study_year)
         ), ARRAY_A);
     }
 
@@ -169,7 +169,7 @@ class Olama_Core_Financial_Service {
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM `{$this->dues_table}` WHERE oracle_family_id = %s AND study_year = %s ORDER BY due_date ASC, id ASC",
             sanitize_text_field((string) $family_id),
-            sanitize_text_field((string) $study_year)
+            $this->canonical_study_year($study_year)
         ), ARRAY_A);
     }
 
@@ -178,7 +178,7 @@ class Olama_Core_Financial_Service {
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT tx.*, st.student_name FROM `{$this->transactions_table}` tx LEFT JOIN `{$wpdb->prefix}olama_core_students` st ON st.student_uid = tx.student_uid WHERE tx.oracle_family_id = %s AND tx.study_year = %s ORDER BY tx.transaction_date ASC, tx.id ASC",
             sanitize_text_field((string) $family_id),
-            sanitize_text_field((string) $study_year)
+            $this->canonical_study_year($study_year)
         ), ARRAY_A);
         foreach ($rows as &$row) {
             $row['trans_date'] = $row['transaction_date'];
@@ -192,7 +192,7 @@ class Olama_Core_Financial_Service {
         $summary = $this->get_summary($family_id, $study_year);
         return array(
             'family_id' => sanitize_text_field((string) $family_id),
-            'study_year' => sanitize_text_field((string) $study_year),
+            'study_year' => $this->canonical_study_year($study_year),
             'family_summary' => $summary ?: array(),
             'due_allocations' => $this->get_dues($family_id, $study_year),
             'student_transactions' => $this->get_transactions($family_id, $study_year),
@@ -202,7 +202,7 @@ class Olama_Core_Financial_Service {
 
     public function query_recipients($study_year, array $filters = array()) {
         global $wpdb;
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         $where = array(
             'fy.study_year = %s',
             'f.is_active = 1',
@@ -327,6 +327,19 @@ class Olama_Core_Financial_Service {
             throw $e;
         }
         return array('operation' => 'replaced', 'count' => count($rows), 'uid' => $family_uid);
+    }
+
+    private function canonical_study_year($value) {
+        $value = sanitize_text_field((string) $value);
+        if ($value === '' || !function_exists('olama_core')) {
+            return '';
+        }
+        $calendar = olama_core()->academic_calendar();
+        $year = $calendar->resolve_external_year('oracle', $value);
+        if (!$year) {
+            throw new InvalidArgumentException('Study year is not mapped to an Olama Core academic year.');
+        }
+        return $calendar->canonical_year_code((int) $year->id);
     }
 
     private function throw_on_error($wpdb) {

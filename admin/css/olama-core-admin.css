@@ -685,6 +685,229 @@
     }
 }
 
+.olama-core-admin .olama-header-status,
+.olama-core-admin .olama-health-state {
+    background: var(--olama-surface);
+    border: 1px solid var(--olama-border);
+    border-radius: 10px;
+    min-width: 230px;
+    padding: 12px 16px;
+}
+
+.olama-core-admin .olama-header-status strong,
+.olama-core-admin .olama-health-state strong {
+    color: var(--olama-primary);
+    display: block;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.olama-core-admin .olama-profile-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0 0 18px;
+}
+
+.olama-core-admin .olama-profile-entry {
+    background: var(--olama-surface);
+    border: 1px solid var(--olama-border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 340px;
+    padding: 22px;
+}
+
+.olama-core-admin .olama-profile-entry > .dashicons {
+    align-items: center;
+    background: #ecf7f5;
+    border-radius: 10px;
+    color: #0f766e;
+    display: flex;
+    font-size: 30px;
+    height: 52px;
+    justify-content: center;
+    width: 52px;
+}
+
+.olama-core-admin .olama-profile-entry h2 {
+    color: var(--olama-primary);
+    font-size: 19px;
+    margin: 0 0 7px;
+}
+
+.olama-core-admin .olama-profile-entry p {
+    color: var(--olama-muted);
+    line-height: 1.7;
+    margin: 0;
+}
+
+.olama-core-admin .olama-profile-entry form {
+    display: grid;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.olama-core-admin .olama-profile-entry input {
+    max-width: none;
+    min-height: 40px;
+    width: 100%;
+}
+
+.olama-core-admin .olama-profile-entry .olama-btn {
+    justify-content: center;
+    margin-top: 6px;
+    width: 100%;
+}
+
+.olama-core-admin .olama-profile-help a {
+    color: #0f766e;
+    font-weight: 700;
+}
+
+.olama-core-admin .olama-context-banner {
+    align-items: center;
+    background: linear-gradient(135deg, #0f766e, #115e59);
+    border-radius: 12px;
+    color: #fff;
+    display: flex;
+    gap: 14px;
+    margin: 0 0 16px;
+    padding: 17px 20px;
+}
+
+.olama-core-admin .olama-context-banner .dashicons {
+    font-size: 30px;
+    height: 30px;
+    width: 30px;
+}
+
+.olama-core-admin .olama-context-banner .olama-label {
+    color: rgba(255, 255, 255, 0.78);
+    margin: 0;
+}
+
+.olama-core-admin .olama-context-banner strong {
+    display: block;
+    font-size: 18px;
+    margin-top: 2px;
+}
+
+.olama-core-admin .olama-anchor-tabs {
+    position: sticky;
+    top: 32px;
+    z-index: 10;
+}
+
+.olama-core-admin .olama-tab.is-danger {
+    color: var(--olama-danger);
+}
+
+.olama-core-admin .olama-danger-zone {
+    border-color: #fecaca;
+}
+
+.olama-core-admin.olama-academic-operations .olama-section > hr:first-child {
+    display: none;
+}
+
+.olama-core-admin.olama-academic-operations .olama-section > h2:first-of-type {
+    color: var(--olama-primary);
+    font-size: 20px;
+    margin-top: 0;
+}
+
+.olama-core-admin.olama-academic-operations .widefat,
+.olama-core-admin.olama-academic-operations .form-table {
+    margin-bottom: 18px;
+}
+
+.olama-core-admin .olama-health-state span {
+    color: var(--olama-muted);
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 3px;
+}
+
+.olama-core-admin .olama-health-state.is-ready {
+    border-inline-start: 4px solid var(--olama-success);
+}
+
+.olama-core-admin .olama-health-state.is-critical {
+    border-inline-start: 4px solid var(--olama-danger);
+}
+
+.olama-core-admin .olama-health-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.olama-core-admin .olama-health-item {
+    align-items: center;
+    background: #fbfcfe;
+    border: 1px solid var(--olama-border);
+    border-radius: 8px;
+    display: flex;
+    gap: 12px;
+    min-height: 76px;
+    padding: 13px 15px;
+}
+
+.olama-core-admin .olama-health-item strong {
+    color: var(--olama-primary);
+    display: block;
+    line-height: 1.6;
+}
+
+.olama-core-admin .olama-health-dot {
+    background: var(--olama-warning);
+    border-radius: 50%;
+    box-shadow: 0 0 0 4px rgba(180, 83, 9, 0.12);
+    flex: 0 0 10px;
+    height: 10px;
+    width: 10px;
+}
+
+.olama-core-admin .olama-health-dot.is-good {
+    background: var(--olama-success);
+    box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.12);
+}
+
+.olama-core-admin .olama-health-table {
+    min-width: 720px;
+}
+
+@media (max-width: 960px) {
+    .olama-core-admin .olama-profile-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .olama-core-admin .olama-profile-entry {
+        min-height: 0;
+    }
+}
+
+@media (max-width: 782px) {
+    .olama-core-admin .olama-header-status,
+    .olama-core-admin .olama-health-state {
+        margin-top: 14px;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .olama-core-admin .olama-health-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .olama-core-admin .olama-anchor-tabs {
+        position: static;
+    }
+}
+
 @media print {
     #adminmenumain,
     #wpadminbar,

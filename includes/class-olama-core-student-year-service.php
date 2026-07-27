@@ -18,7 +18,7 @@ class Olama_Core_Student_Year_Service {
 
         $student_uid = sanitize_text_field($student_uid);
         if ($study_year) {
-            return $this->repo->get_row($this->table, array('student_uid' => $student_uid, 'study_year' => sanitize_text_field($study_year)));
+            return $this->repo->get_row($this->table, array('student_uid' => $student_uid, 'study_year' => $this->canonical_study_year($study_year)));
         }
 
         return $wpdb->get_row($wpdb->prepare(
@@ -43,7 +43,7 @@ class Olama_Core_Student_Year_Service {
             return $wpdb->get_results($wpdb->prepare(
                 'SELECT * FROM `' . esc_sql($this->table) . '` WHERE family_uid = %s AND study_year = %s ORDER BY student_uid ASC',
                 sanitize_text_field($family_uid),
-                sanitize_text_field($study_year)
+                $this->canonical_study_year($study_year)
             ), ARRAY_A);
         }
 
@@ -95,7 +95,7 @@ class Olama_Core_Student_Year_Service {
         $student_id = isset($data['oracle_student_id']) ? $data['oracle_student_id'] : (isset($data['student_id']) ? $data['student_id'] : '');
         $family_id = sanitize_text_field((string) $family_id);
         $student_id = sanitize_text_field((string) $student_id);
-        $study_year = isset($data['study_year']) ? sanitize_text_field($data['study_year']) : '';
+        $study_year = isset($data['study_year']) ? $this->canonical_study_year($data['study_year']) : '';
         if ('' === $family_id || '' === $student_id || '' === $study_year) {
             throw new InvalidArgumentException('Missing student year keys.');
         }
@@ -132,6 +132,16 @@ class Olama_Core_Student_Year_Service {
         $payload['source_hash'] = hash('sha256', wp_json_encode($payload));
 
         return $payload;
+    }
+
+    private function canonical_study_year($value) {
+        $value = sanitize_text_field((string) $value);
+        if ($value === '' || !function_exists('olama_core')) {
+            return '';
+        }
+        $calendar = olama_core()->academic_calendar();
+        $year = $calendar->resolve_external_year('oracle', $value);
+        return $year ? $calendar->canonical_year_code((int) $year->id) : '';
     }
 
     private function text_any($data, $keys, $default = null) {

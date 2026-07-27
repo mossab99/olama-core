@@ -46,7 +46,7 @@ class Olama_Core_Audience_Service {
     public function query_phone_book($study_year, array $args = array()) {
         global $wpdb;
 
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         if ($study_year === '') {
             $years = $this->get_study_years();
             $study_year = $years ? (string) $years[0] : '';
@@ -151,7 +151,7 @@ class Olama_Core_Audience_Service {
         global $wpdb;
 
         $target_type = sanitize_key((string) $target_type);
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         $definitions = array(
             'families' => array('table' => 'olama_core_families', 'sync_column' => 'last_synced_at', 'year_scoped' => false),
             'students' => array('table' => 'olama_core_students', 'sync_column' => 'last_synced_at', 'year_scoped' => false),
@@ -235,7 +235,7 @@ class Olama_Core_Audience_Service {
         // Campaign audiences are based on active Core families only.
         $where = array('f.is_active = 1');
         $values = array();
-        $study_year = sanitize_text_field(isset($filters['study_year']) ? $filters['study_year'] : '');
+        $study_year = $this->canonical_study_year(isset($filters['study_year']) ? $filters['study_year'] : '');
 
         if (!empty($filters['family_id'])) {
             $where[] = 'f.oracle_family_id = %s';
@@ -511,7 +511,7 @@ class Olama_Core_Audience_Service {
     }
 
     private function study_year(array $filters) {
-        $study_year = sanitize_text_field(isset($filters['study_year']) ? $filters['study_year'] : '');
+        $study_year = $this->canonical_study_year(isset($filters['study_year']) ? $filters['study_year'] : '');
         if ($study_year === '') {
             $years = $this->get_study_years();
             $study_year = $years ? (string) $years[0] : '';
@@ -526,10 +526,20 @@ class Olama_Core_Audience_Service {
             return array();
         }
         $table = $this->repo->table('olama_core_student_years');
-        $study_year = sanitize_text_field((string) $study_year);
+        $study_year = $this->canonical_study_year($study_year);
         if ($study_year !== '') {
             return $wpdb->get_col($wpdb->prepare("SELECT DISTINCT `{$column}` FROM `{$table}` WHERE study_year = %s AND `{$column}` IS NOT NULL AND `{$column}` <> '' ORDER BY `{$column}`", $study_year));
         }
         return $wpdb->get_col("SELECT DISTINCT `{$column}` FROM `{$table}` WHERE `{$column}` IS NOT NULL AND `{$column}` <> '' ORDER BY `{$column}`");
+    }
+
+    private function canonical_study_year($value) {
+        $value = sanitize_text_field((string) $value);
+        if ($value === '' || !function_exists('olama_core')) {
+            return '';
+        }
+        $calendar = olama_core()->academic_calendar();
+        $year = $calendar->resolve_external_year('oracle', $value);
+        return $year ? $calendar->canonical_year_code((int) $year->id) : '';
     }
 }

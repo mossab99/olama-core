@@ -32,10 +32,15 @@ class Olama_Core_Academic_Service {
             update_option('olama_core_db_version', OLAMA_CORE_VERSION);
         }
 
-        $study_year = $this->text($snapshot, 'study_year');
-        if ('' === $study_year) {
+        $source_study_year = $this->text($snapshot, 'study_year');
+        if ('' === $source_study_year) {
             throw new InvalidArgumentException('Academic snapshot study year is required.');
         }
+        $year = olama_core()->academic_calendar()->resolve_external_year('oracle', $source_study_year);
+        if (!$year) {
+            throw new InvalidArgumentException('Academic snapshot study year is not mapped to an Olama Core academic year.');
+        }
+        $study_year = olama_core()->academic_calendar()->canonical_year_code((int) $year->id);
 
         foreach (array('grades', 'sections', 'grade_sections', 'students', 'grade_subjects') as $key) {
             if (!isset($snapshot[$key]) || !is_array($snapshot[$key])) {
@@ -126,14 +131,14 @@ class Olama_Core_Academic_Service {
         global $wpdb;
         return $wpdb->get_results($wpdb->prepare(
             'SELECT * FROM `' . esc_sql($this->grade_sections) . '` WHERE study_year=%s ORDER BY CAST(grade_id AS UNSIGNED), grade_id, CAST(section_id AS UNSIGNED), section_id',
-            sanitize_text_field((string) $study_year)
+            $this->canonical_study_year($study_year)
         ), ARRAY_A);
     }
 
     public function students($study_year, $grade_id = '', $section_id = '') {
         global $wpdb;
         $where = array('study_year=%s');
-        $values = array(sanitize_text_field((string) $study_year));
+        $values = array($this->canonical_study_year($study_year));
         if ('' !== (string) $grade_id) {
             $where[] = 'grade_id=%s';
             $values[] = sanitize_text_field((string) $grade_id);
@@ -151,7 +156,7 @@ class Olama_Core_Academic_Service {
     public function grade_subjects($study_year, $grade_id = '') {
         global $wpdb;
         $sql = 'SELECT * FROM `' . esc_sql($this->grade_subjects) . '` WHERE study_year=%s';
-        $values = array(sanitize_text_field((string) $study_year));
+        $values = array($this->canonical_study_year($study_year));
         if ('' !== (string) $grade_id) {
             $sql .= ' AND grade_id=%s';
             $values[] = sanitize_text_field((string) $grade_id);
@@ -237,6 +242,12 @@ class Olama_Core_Academic_Service {
 
     private function text(array $row, $key) {
         return isset($row[$key]) && null !== $row[$key] ? sanitize_text_field((string) $row[$key]) : '';
+    }
+
+    private function canonical_study_year($value) {
+        $calendar = olama_core()->academic_calendar();
+        $year = $calendar->resolve_external_year('oracle', sanitize_text_field((string) $value));
+        return $year ? $calendar->canonical_year_code((int) $year->id) : '';
     }
 
     private function nullable_text(array $row, $key) {
