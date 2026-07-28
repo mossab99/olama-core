@@ -152,7 +152,11 @@ class Olama_Core_Transport_Master_Service {
                     'sample_address' => $this->nullable_text($row, array('sample_address')),
                     'source_family_count' => $this->nullable_int($row, array('family_count')),
                     'source_student_count' => $this->nullable_int($row, array('student_count')),
-                    'is_active' => $this->bool_value($row, array('is_active', 'active'), 1),
+                    'is_active' => $this->bool_value(
+                        $row,
+                        array('is_active', 'active', 'region_is_active', 'region_active', 'is_active_name', 'active_name', 'status', 'status_name'),
+                        1
+                    ),
                     'source_system' => 'oracle',
                     'raw_json' => $this->raw_json($row),
                     'last_synced_at' => $now,
@@ -244,7 +248,7 @@ class Olama_Core_Transport_Master_Service {
     private function bool_value($row, $keys, $default) {
         foreach ($keys as $key) {
             if (array_key_exists($key, $row) && $row[$key] !== '' && $row[$key] !== null) {
-                return in_array(strtolower(trim((string) $row[$key])), array('1', 'true', 'yes', 'active', 'enabled'), true) ? 1 : 0;
+                return in_array(strtolower(trim((string) $row[$key])), array('1', 'true', 'yes', 'y', 'active', 'enabled', 'فعال'), true) ? 1 : 0;
             }
         }
         return (int) $default;
