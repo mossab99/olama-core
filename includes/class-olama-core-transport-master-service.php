@@ -152,7 +152,7 @@ class Olama_Core_Transport_Master_Service {
                     'sample_address' => $this->nullable_text($row, array('sample_address')),
                     'source_family_count' => $this->nullable_int($row, array('family_count')),
                     'source_student_count' => $this->nullable_int($row, array('student_count')),
-                    'is_active' => 1,
+                    'is_active' => $this->bool_value($row, array('is_active', 'active'), 1),
                     'source_system' => 'oracle',
                     'raw_json' => $this->raw_json($row),
                     'last_synced_at' => $now,

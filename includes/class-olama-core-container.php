@@ -20,6 +20,8 @@ class Olama_Core_Container {
     private $academic_calendar;
     private $academic_context;
     private $year_closeout;
+    private $sync;
+    private $read_models;
     private $admin;
     private $academic_admin;
     private $users_admin;
@@ -169,5 +171,19 @@ class Olama_Core_Container {
         }
 
         return $this->year_closeout;
+    }
+
+    public function sync() {
+        if (!$this->sync) {
+            $this->sync = new Olama_Core_Sync_Service();
+        }
+        return $this->sync;
+    }
+
+    public function read_models() {
+        if (!$this->read_models) {
+            $this->read_models = new Olama_Core_Read_Model_Service(new Olama_Core_Repository());
+        }
+        return $this->read_models;
     }
 }

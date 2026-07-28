@@ -134,6 +134,47 @@ class Olama_Core_Student_Year_Service {
         return $payload;
     }
 
+    public function get_by_uids(array $student_uids, $study_year = null) {
+        global $wpdb;
+
+        $student_uids = array_values(array_unique(array_filter(array_map('sanitize_text_field', $student_uids), 'strlen')));
+        if (!$student_uids) {
+            return array();
+        }
+        $where = array('student_uid IN (' . implode(',', array_fill(0, count($student_uids), '%s')) . ')');
+        $values = $student_uids;
+        if ($study_year) {
+            $where[] = 'study_year=%s';
+            $values[] = $this->canonical_study_year($study_year);
+        }
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` WHERE ' . implode(' AND ', $where) . ' ORDER BY study_year DESC, student_uid',
+            $values
+        ), ARRAY_A);
+    }
+
+    public function study_years() {
+        global $wpdb;
+        return $wpdb->get_col('SELECT DISTINCT study_year FROM `' . esc_sql($this->table) . '` WHERE study_year IS NOT NULL AND study_year<>\'\' ORDER BY study_year DESC');
+    }
+
+    public function for_study_year($study_year, array $filters = array()) {
+        global $wpdb;
+
+        $where = array('study_year=%s');
+        $values = array($this->canonical_study_year($study_year));
+        foreach (array('student_uid', 'family_uid', 'class_id', 'section_id', 'student_status') as $column) {
+            if (isset($filters[$column]) && '' !== (string) $filters[$column]) {
+                $where[] = '`' . $column . '`=%s';
+                $values[] = sanitize_text_field((string) $filters[$column]);
+            }
+        }
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` WHERE ' . implode(' AND ', $where) . ' ORDER BY student_uid',
+            $values
+        ), ARRAY_A);
+    }
+
     private function canonical_study_year($value) {
         $value = sanitize_text_field((string) $value);
         if ($value === '' || !function_exists('olama_core')) {

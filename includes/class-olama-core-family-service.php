@@ -21,6 +21,52 @@ class Olama_Core_Family_Service {
         return $this->repo->get_row($this->table, array('oracle_family_id' => sanitize_text_field($oracle_family_id)));
     }
 
+    public function get_by_id($id) {
+        return $this->repo->get_row($this->table, array('id' => absint($id)));
+    }
+
+    public function get_by_uids(array $family_uids) {
+        return $this->get_many('family_uid', $family_uids);
+    }
+
+    public function get_by_oracle_ids(array $oracle_family_ids) {
+        return $this->get_many('oracle_family_id', $oracle_family_ids);
+    }
+
+    public function all($args = array()) {
+        global $wpdb;
+        $limit = isset($args['limit']) ? max(1, min(10000, absint($args['limit']))) : 10000;
+        $offset = isset($args['offset']) ? max(0, absint($args['offset'])) : 0;
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` ORDER BY CAST(oracle_family_id AS UNSIGNED), oracle_family_id LIMIT %d OFFSET %d',
+            $limit,
+            $offset
+        ), ARRAY_A);
+    }
+
+    /**
+     * Return canonical families that have an active student in a study year.
+     */
+    public function active_for_study_year($study_year) {
+        global $wpdb;
+
+        $year = olama_core()->academic_calendar()->resolve_year_code($study_year);
+        if (!$year) {
+            return array();
+        }
+        $study_year = olama_core()->academic_calendar()->canonical_year_code((int) $year->id);
+        $years = $this->repo->table('olama_core_student_years');
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT f.* FROM `" . esc_sql($this->table) . "` f
+             INNER JOIN `" . esc_sql($years) . "` y ON y.family_uid=f.family_uid
+             WHERE y.study_year=%s AND (y.student_status='1' OR UPPER(y.student_status)='ACTIVE')
+             GROUP BY f.id
+             ORDER BY CAST(f.oracle_family_id AS UNSIGNED), f.oracle_family_id",
+            $study_year
+        ), ARRAY_A);
+    }
+
     public function search($term, $args = array()) {
         return $this->repo->search($this->table, array('family_uid', 'oracle_family_id', 'sponsor_full_name', 'father_name', 'father_mobile', 'mother_mobile', 'primary_mobile', 'family_address', 'address', 'trans_region_name'), sanitize_text_field($term), $args);
     }
@@ -61,6 +107,20 @@ class Olama_Core_Family_Service {
 
     public function count($args = array()) {
         return $this->repo->count($this->table, $args);
+    }
+
+    private function get_many($column, array $values) {
+        global $wpdb;
+
+        $values = array_values(array_unique(array_filter(array_map('sanitize_text_field', $values), 'strlen')));
+        if (!$values || !in_array($column, array('family_uid', 'oracle_family_id'), true)) {
+            return array();
+        }
+        $placeholders = implode(',', array_fill(0, count($values), '%s'));
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` WHERE `' . esc_sql($column) . '` IN (' . $placeholders . ')',
+            $values
+        ), ARRAY_A);
     }
 
     private function normalize(array $data) {

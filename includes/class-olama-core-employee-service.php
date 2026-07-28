@@ -17,6 +17,20 @@ class Olama_Core_Employee_Service {
         return $this->repo->get_row($this->table, array('employee_id' => sanitize_text_field((string) $employee_id)));
     }
 
+    public function get_by_employee_ids(array $employee_ids) {
+        global $wpdb;
+
+        $employee_ids = array_values(array_unique(array_filter(array_map('sanitize_text_field', $employee_ids), 'strlen')));
+        if (!$employee_ids) {
+            return array();
+        }
+        $placeholders = implode(',', array_fill(0, count($employee_ids), '%s'));
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` WHERE employee_id IN (' . $placeholders . ')',
+            $employee_ids
+        ), ARRAY_A);
+    }
+
     /**
      * Build the local Employee 360 projection from Oracle-owned employee data
      * and the Core-owned relationships that reference the employee number.

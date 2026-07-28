@@ -17,6 +17,42 @@ class Olama_Core_Student_Service {
         return $this->repo->get_row($this->table, array('student_uid' => sanitize_text_field($student_uid)));
     }
 
+    public function get_by_id($id) {
+        return $this->repo->get_row($this->table, array('id' => absint($id)));
+    }
+
+    public function belongs_to_family($student_uid, $family_uid) {
+        return (bool) $this->repo->get_row($this->table, array(
+            'student_uid' => sanitize_text_field((string) $student_uid),
+            'family_uid' => sanitize_text_field((string) $family_uid),
+        ));
+    }
+
+    public function get_by_uids(array $student_uids) {
+        global $wpdb;
+
+        $student_uids = array_values(array_unique(array_filter(array_map('sanitize_text_field', $student_uids), 'strlen')));
+        if (!$student_uids) {
+            return array();
+        }
+        $placeholders = implode(',', array_fill(0, count($student_uids), '%s'));
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` WHERE student_uid IN (' . $placeholders . ')',
+            $student_uids
+        ), ARRAY_A);
+    }
+
+    public function all($args = array()) {
+        global $wpdb;
+        $limit = isset($args['limit']) ? max(1, min(20000, absint($args['limit']))) : 20000;
+        $offset = isset($args['offset']) ? max(0, absint($args['offset'])) : 0;
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->table) . '` ORDER BY student_name, student_uid LIMIT %d OFFSET %d',
+            $limit,
+            $offset
+        ), ARRAY_A);
+    }
+
     public function get_by_oracle_keys($oracle_family_id, $oracle_student_id) {
         return $this->repo->get_row($this->table, array(
             'oracle_family_id' => sanitize_text_field($oracle_family_id),

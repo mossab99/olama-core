@@ -31,6 +31,8 @@ require_once OLAMA_CORE_PATH . 'includes/class-olama-core-academic-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-academic-calendar-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-academic-context-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-year-closeout-service.php';
+require_once OLAMA_CORE_PATH . 'includes/class-olama-core-sync-service.php';
+require_once OLAMA_CORE_PATH . 'includes/class-olama-core-read-model-service.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-permissions.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-logger.php';
 require_once OLAMA_CORE_PATH . 'includes/class-olama-core-container.php';
