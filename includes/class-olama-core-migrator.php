@@ -34,6 +34,7 @@ class Olama_Core_Migrator {
         $academic_grade_sections = $wpdb->prefix . 'olama_core_academic_grade_sections';
         $academic_students = $wpdb->prefix . 'olama_core_academic_students';
         $academic_grade_subjects = $wpdb->prefix . 'olama_core_academic_grade_subjects';
+        $academic_transferred_students = $wpdb->prefix . 'olama_core_academic_transferred_students';
         $academic_years = $wpdb->prefix . 'olama_academic_years';
         $semesters = $wpdb->prefix . 'olama_semesters';
         $academic_context = $wpdb->prefix . 'olama_core_academic_context';
@@ -580,6 +581,30 @@ class Olama_Core_Migrator {
             KEY idx_grade_subject_active (study_year, grade_id, is_active)
         ) {$charset_collate};");
 
+        dbDelta("CREATE TABLE {$academic_transferred_students} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            study_year VARCHAR(20) NOT NULL,
+            family_id VARCHAR(50) NOT NULL,
+            student_id VARCHAR(50) NOT NULL,
+            student_name VARCHAR(255) NULL,
+            student_national_no VARCHAR(50) NULL,
+            class_id VARCHAR(50) NULL,
+            class_name VARCHAR(190) NULL,
+            section_id VARCHAR(50) NULL,
+            section_name VARCHAR(190) NULL,
+            trans_date DATE NULL,
+            to_school VARCHAR(255) NULL,
+            from_school VARCHAR(255) NULL,
+            notes TEXT NULL,
+            raw_json LONGTEXT NULL,
+            last_synced_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            KEY idx_transferred_student (study_year, family_id, student_id),
+            KEY idx_transferred_scope (study_year),
+            KEY idx_transferred_student_name (student_name)
+        ) {$charset_collate};");
+
         dbDelta("CREATE TABLE {$audit_logs} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -631,6 +656,7 @@ class Olama_Core_Migrator {
             $wpdb->prefix . 'olama_core_academic_grade_sections',
             $wpdb->prefix . 'olama_core_academic_students',
             $wpdb->prefix . 'olama_core_academic_grade_subjects',
+            $wpdb->prefix . 'olama_core_academic_transferred_students',
             $wpdb->prefix . 'olama_academic_years',
             $wpdb->prefix . 'olama_semesters',
             $wpdb->prefix . 'olama_core_academic_context',

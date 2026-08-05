@@ -3637,6 +3637,7 @@ class Olama_Core_Admin {
             'grade_students' => 'طلاب الصف',
             'section_students' => 'طلاب الصف والشعبة',
             'grade_subjects' => 'مواد الصفوف',
+            'transferred_students' => 'الطلبة المنتقلون',
         );
         $view = isset($_GET['academic_view']) ? sanitize_key(wp_unslash($_GET['academic_view'])) : 'grades';
         if (!isset($views[$view])) {
@@ -3662,7 +3663,7 @@ class Olama_Core_Admin {
 
         echo '<div class="wrap olama-core-admin olama-academic-admin" dir="rtl"><div class="olama-page">';
         echo '<header class="olama-page-header"><div><h1 class="olama-page-title">البنية الأكاديمية</h1>';
-        echo '<p class="olama-page-subtitle">استعراض الصفوف والشعب والطلاب والمواد الأكاديمية المحفوظة محلياً في Olama Core. تتم الكتابة بواسطة Oracle Sync فقط.</p></div>';
+        echo '<p class="olama-page-subtitle">استعراض الصفوف والشعب والطلاب والمواد الأكاديمية والطلاب المنتقلين المحفوظة محلياً في Olama Core. تتم الكتابة بواسطة Oracle Sync فقط.</p></div>';
         echo '<div class="olama-actions"><a class="olama-btn olama-btn-ghost" href="' . esc_url($this->admin_page_url('olama-core-directory')) . '">مستكشف البيانات</a><a class="olama-btn olama-btn-secondary" href="' . esc_url(admin_url('admin.php?page=olama-oracle-sync')) . '">فتح Oracle Sync</a></div></header>';
 
         echo '<div class="olama-academic-actions">';
@@ -3678,7 +3679,7 @@ class Olama_Core_Admin {
         }
         echo '</div>';
 
-        if (in_array($view, array('grade_sections', 'grade_students', 'section_students', 'grade_subjects'), true)) {
+        if (in_array($view, array('grade_sections', 'grade_students', 'section_students', 'grade_subjects', 'transferred_students'), true)) {
             echo '<form method="get" class="olama-filter-card olama-academic-filter">';
             echo '<input type="hidden" name="page" value="olama-core-academic-info"><input type="hidden" name="academic_view" value="' . esc_attr($view) . '">';
             echo '<p><label class="olama-label" for="academic-study-year">السنة الدراسية</label><input id="academic-study-year" name="study_year" type="text" value="' . esc_attr($study_year) . '" placeholder="2026-2027" required></p>';
@@ -3713,6 +3714,18 @@ class Olama_Core_Admin {
             $this->simple_table($academic->students($study_year, $grade_id), array('family_id' => 'رقم العائلة', 'student_id' => 'رقم الطالب', 'student_name' => 'اسم الطالب', 'grade_name' => 'الصف', 'section_name' => 'الشعبة'));
         } elseif ('section_students' === $view) {
             $this->simple_table($academic->students($study_year, $grade_id, $section_id), array('family_id' => 'رقم العائلة', 'student_id' => 'رقم الطالب', 'student_name' => 'اسم الطالب', 'grade_name' => 'الصف', 'section_name' => 'الشعبة'));
+        } elseif ('transferred_students' === $view) {
+            $this->simple_table($academic->transferred_students($study_year), array(
+                'study_year' => 'السنة الدراسية',
+                'family_id' => 'رقم العائلة',
+                'student_id' => 'رقم الطالب',
+                'student_name' => 'اسم الطالب',
+                'class_name' => 'الصف',
+                'section_name' => 'الشعبة',
+                'trans_date' => 'تاريخ الحركة',
+                'to_school' => 'المدرسة المنقول إليها',
+                'notes' => 'ملاحظات',
+            ));
         } else {
             $this->simple_table($academic->grade_subjects($study_year, $grade_id), array('law_id' => 'رقم القانون', 'grade_id' => 'رقم الصف', 'grade_name' => 'اسم الصف', 'subject_id' => 'رقم المادة', 'subject_name' => 'اسم المادة', 'subject_status_name' => 'الحالة'));
         }

@@ -11,6 +11,7 @@ class Olama_Core_Academic_Service {
     private $grade_sections;
     private $students;
     private $grade_subjects;
+    private $transferred_students;
 
     public function __construct(Olama_Core_Repository $repo) {
         $this->repo = $repo;
@@ -19,6 +20,7 @@ class Olama_Core_Academic_Service {
         $this->grade_sections = $repo->table('olama_core_academic_grade_sections');
         $this->students = $repo->table('olama_core_academic_students');
         $this->grade_subjects = $repo->table('olama_core_academic_grade_subjects');
+        $this->transferred_students = $repo->table('olama_core_academic_transferred_students');
     }
 
     public function import_snapshot(array $snapshot) {
@@ -88,7 +90,7 @@ class Olama_Core_Academic_Service {
                 $this->assert_written($result, 'section');
             }
 
-            foreach (array($this->grade_sections, $this->students, $this->grade_subjects) as $table) {
+            foreach (array($this->grade_sections, $this->students, $this->grade_subjects, $this->transferred_students) as $table) {
                 $this->assert_query($wpdb->delete($table, array('study_year' => $study_year)), 'study-year snapshot');
             }
 
@@ -100,6 +102,11 @@ class Olama_Core_Academic_Service {
             }
             foreach ($snapshot['grade_subjects'] as $row) {
                 $this->insert_grade_subject($row, $study_year, $now);
+            }
+            if (!empty($snapshot['transferred_students']) && is_array($snapshot['transferred_students'])) {
+                foreach ($snapshot['transferred_students'] as $row) {
+                    $this->insert_transferred_student($row, $study_year, $now);
+                }
             }
 
             $wpdb->query('COMMIT');
@@ -115,6 +122,7 @@ class Olama_Core_Academic_Service {
             'grade_sections' => count($snapshot['grade_sections']),
             'students' => count($snapshot['students']),
             'grade_subjects' => count($snapshot['grade_subjects']),
+            'transferred_students' => count($snapshot['transferred_students'] ?? array()),
         );
     }
 
@@ -387,6 +395,46 @@ class Olama_Core_Academic_Service {
             }
         }
         return array_values($unique);
+    }
+
+    public function transferred_students($study_year) {
+        global $wpdb;
+        $study_year = $this->canonical_study_year($study_year);
+        if ('' === $study_year) {
+            return array();
+        }
+        return $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($this->transferred_students) . '` WHERE study_year = %s ORDER BY trans_date DESC, id DESC',
+            $study_year
+        ), ARRAY_A);
+    }
+
+    private function insert_transferred_student(array $row, $study_year, $now) {
+        global $wpdb;
+        $family_id = $this->text($row, 'family_id');
+        $student_id = $this->text($row, 'student_id');
+        if ('' === $family_id || '' === $student_id) {
+            return;
+        }
+        $result = $wpdb->insert($this->transferred_students, array(
+            'study_year' => $study_year,
+            'family_id' => $family_id,
+            'student_id' => $student_id,
+            'student_name' => $this->nullable_text($row, 'student_name'),
+            'student_national_no' => $this->nullable_text($row, 'student_national_no'),
+            'class_id' => $this->nullable_text($row, 'class_id'),
+            'class_name' => $this->nullable_text($row, 'class_name'),
+            'section_id' => $this->nullable_text($row, 'section_id'),
+            'section_name' => $this->nullable_text($row, 'section_name'),
+            'trans_date' => $this->nullable_text($row, 'trans_date'),
+            'to_school' => $this->nullable_text($row, 'to_school'),
+            'from_school' => $this->nullable_text($row, 'from_school'),
+            'notes' => $this->nullable_text($row, 'notes'),
+            'raw_json' => wp_json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'last_synced_at' => $now,
+            'created_at' => $now,
+        ));
+        $this->assert_written($result, 'transferred student');
     }
 
     private function assert_written($result, $entity) {
