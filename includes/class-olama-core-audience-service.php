@@ -444,10 +444,19 @@ class Olama_Core_Audience_Service {
         global $wpdb;
         $student_years   = $this->repo->table('olama_core_student_years');
         $active_condition = $this->active_student_year_condition('sy');
-        $rows = $wpdb->get_col($wpdb->prepare(
-            "SELECT DISTINCT sy.oracle_family_id FROM `{$student_years}` sy WHERE sy.study_year = %s AND sy.oracle_family_id IS NOT NULL AND sy.oracle_family_id <> '' AND {$active_condition}",
-            $study_year
-        ));
+        $canonical       = $this->canonical_study_year($study_year);
+        $years_to_check  = array_values(array_filter(array_unique(array(
+            (string) $study_year,
+            (string) $canonical,
+            str_replace('-', '/', (string) $study_year),
+            str_replace('/', '-', (string) $study_year),
+            $canonical ? str_replace('-', '/', (string) $canonical) : '',
+            $canonical ? str_replace('/', '-', (string) $canonical) : '',
+        )), 'strlen'));
+
+        $placeholders = implode(',', array_fill(0, count($years_to_check), '%s'));
+        $sql = "SELECT DISTINCT sy.oracle_family_id FROM `{$student_years}` sy WHERE sy.study_year IN ({$placeholders}) AND sy.oracle_family_id IS NOT NULL AND sy.oracle_family_id <> '' AND {$active_condition}";
+        $rows = $wpdb->get_col($wpdb->prepare($sql, $years_to_check));
         return array_values(array_unique(array_map('intval', array_filter((array) $rows, 'strlen'))));
     }
 
@@ -475,10 +484,21 @@ class Olama_Core_Audience_Service {
             );
         }
         global $wpdb;
-        $rows = $wpdb->get_col($wpdb->prepare(
-            "SELECT DISTINCT family_id FROM `{$transferred}` WHERE study_year = %s AND family_id IS NOT NULL AND family_id <> ''",
-            $study_year
-        ));
+
+        $canonical = $this->canonical_study_year($study_year);
+        $years_to_check = array_values(array_filter(array_unique(array(
+            (string) $study_year,
+            (string) $canonical,
+            str_replace('-', '/', (string) $study_year),
+            str_replace('/', '-', (string) $study_year),
+            $canonical ? str_replace('-', '/', (string) $canonical) : '',
+            $canonical ? str_replace('/', '-', (string) $canonical) : '',
+        )), 'strlen'));
+
+        $placeholders = implode(',', array_fill(0, count($years_to_check), '%s'));
+        $sql = "SELECT DISTINCT family_id FROM `{$transferred}` WHERE study_year IN ({$placeholders}) AND family_id IS NOT NULL AND family_id <> ''";
+        $rows = $wpdb->get_col($wpdb->prepare($sql, $years_to_check));
+
         return array_values(array_unique(array_map('intval', array_filter((array) $rows, 'strlen'))));
     }
 
