@@ -152,6 +152,77 @@ class Olama_Core_Audience_Service {
 
         $target_type = sanitize_key((string) $target_type);
         $study_year = $this->canonical_study_year($study_year);
+        if (($target_type === 'finance_renewal_reminder' || $target_type === 'renewal_reminder')) {
+            $current_year = $study_year;
+            if ($current_year === '' && function_exists('olama_core') && method_exists(olama_core(), 'academic_context')) {
+                $year = olama_core()->academic_context()->current_year();
+                $current_year = $year ? (string) (!empty($year->code) ? $year->code : $year->year_name) : '';
+                $current_year = $this->canonical_study_year($current_year);
+            }
+            $previous_year = $this->get_previous_study_year_code($current_year);
+            $definitions = array(
+                'families' => array('table' => 'olama_core_families', 'sync_column' => 'last_synced_at', 'year_scoped' => false, 'required' => true),
+                'students' => array('table' => 'olama_core_students', 'sync_column' => 'last_synced_at', 'year_scoped' => false, 'required' => true),
+                'student_years_previous' => array('table' => 'olama_core_student_years', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $previous_year, 'required' => true),
+                'student_years_current' => array('table' => 'olama_core_student_years', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $current_year, 'required' => true),
+                'transferred_students' => array('table' => 'olama_core_academic_transferred_students', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $previous_year, 'required' => true),
+            );
+
+            $sources = array();
+            $ready = $current_year !== '' && $previous_year !== '';
+            $latest_values = array();
+
+            foreach ($definitions as $key => $definition) {
+                $table = $this->repo->table($definition['table']);
+                $exists = Olama_Core_Migrator::table_exists($table);
+                $count = 0;
+                $latest = null;
+
+                if ($exists && ( empty($definition['year_scoped']) || !empty($definition['study_year']) )) {
+                    $where = '';
+                    $values = array();
+                    if (!empty($definition['year_scoped'])) {
+                        $where = ' WHERE study_year = %s';
+                        $values[] = $definition['study_year'];
+                    }
+
+                    $count_sql = "SELECT COUNT(*) FROM `{$table}`{$where}";
+                    $sync_sql = "SELECT MAX(`{$definition['sync_column']}`) FROM `{$table}`{$where}";
+                    $count = (int) ($values ? $wpdb->get_var($wpdb->prepare($count_sql, $values)) : $wpdb->get_var($count_sql));
+                    $latest = $values ? $wpdb->get_var($wpdb->prepare($sync_sql, $values)) : $wpdb->get_var($sync_sql);
+                }
+
+                if (!empty($definition['required']) && (!$exists || $count === 0)) {
+                    $ready = false;
+                }
+
+                if ($latest) {
+                    $latest_values[] = $latest;
+                }
+
+                $sources[$key] = array(
+                    'ready' => $exists && ($count > 0 || empty($definition['required'])),
+                    'required' => !empty($definition['required']),
+                    'row_count' => $count,
+                    'last_synced_at' => $latest ?: null,
+                );
+            }
+
+            sort($latest_values);
+
+            return array(
+                'ready' => $ready,
+                'target_type' => $target_type,
+                'study_year' => $current_year,
+                'current_year' => $current_year,
+                'previous_year' => $previous_year,
+                'last_synced_at' => $latest_values ? reset($latest_values) : null,
+                'checked_at' => current_time('mysql'),
+                'sources' => $sources,
+                'message' => $ready ? 'Olama Core renewal audience sources are ready.' : 'Olama Core renewal audience sources are incomplete. Synchronize families, students, student years, and transferred students before preparing this campaign.',
+            );
+        }
+
         $definitions = array(
             'families' => array('table' => 'olama_core_families', 'sync_column' => 'last_synced_at', 'year_scoped' => false),
             'students' => array('table' => 'olama_core_students', 'sync_column' => 'last_synced_at', 'year_scoped' => false),
@@ -163,6 +234,10 @@ class Olama_Core_Audience_Service {
             $definitions['financial_dues'] = array('table' => 'olama_core_family_financial_dues', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'optional' => true);
         } elseif ($target_type === 'transportation') {
             $definitions['transportation'] = array('table' => 'olama_core_student_transportation', 'sync_column' => 'last_synced_at', 'year_scoped' => true);
+        } elseif ($target_type === 'finance_renewal_reminder' || $target_type === 'renewal_reminder') {
+            // Renewal reminder needs student_years for the previous year as well.
+            // The transferred-students table is optional (added later by sync).
+            $definitions['transferred_students'] = array('table' => 'olama_core_academic_transferred_students', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'optional' => true);
         }
 
         $sources = array();
@@ -225,7 +300,133 @@ class Olama_Core_Audience_Service {
         if ($target_type === 'collection' || $target_type === 'financial') {
             return $this->query_financial($filters);
         }
+        if ($target_type === 'finance_renewal_reminder' || $target_type === 'renewal_reminder') {
+            return $this->query_renewal_candidates(isset($filters['study_year']) ? $filters['study_year'] : '', $filters);
+        }
         return $this->query_general($filters);
+    }
+
+    public function query_renewal_candidates($current_study_year, array $args = array()) {
+        global $wpdb;
+
+        $current_year = $this->canonical_study_year($current_study_year);
+        if ($current_year === '' && function_exists('olama_core') && method_exists(olama_core(), 'academic_context')) {
+            $year = olama_core()->academic_context()->current_year();
+            $current_year = $year ? (string) (!empty($year->code) ? $year->code : $year->year_name) : '';
+            $current_year = $this->canonical_study_year($current_year);
+        }
+        $previous_year = $this->get_previous_study_year_code($current_year);
+        if ($previous_year === '' || $current_year === '') {
+            return $this->response(array(), 0, 50, 0, 'finance_renewal_reminder', array(
+                'current_year' => $current_year,
+                'previous_year' => $previous_year,
+            ));
+        }
+
+        $families = $this->repo->table('olama_core_families');
+        $student_years = $this->repo->table('olama_core_student_years');
+        $transferred = $this->repo->table('olama_core_academic_transferred_students');
+        $has_transferred_table = Olama_Core_Migrator::table_exists($transferred);
+
+        $where = array(
+            'f.is_active = 1',
+            $wpdb->prepare(
+                "EXISTS (
+                    SELECT 1 FROM `{$student_years}` sy_prev
+                    WHERE (sy_prev.family_uid = f.family_uid OR sy_prev.oracle_family_id = f.oracle_family_id)
+                      AND sy_prev.study_year = %s
+                )",
+                $previous_year
+            ),
+            $wpdb->prepare(
+                "NOT EXISTS (
+                    SELECT 1 FROM `{$student_years}` sy_curr
+                    WHERE (sy_curr.family_uid = f.family_uid OR sy_curr.oracle_family_id = f.oracle_family_id)
+                      AND sy_curr.study_year = %s
+                )",
+                $current_year
+            ),
+        );
+        $values = array();
+
+        if ($has_transferred_table) {
+            $where[] = $wpdb->prepare(
+                "NOT EXISTS (
+                    SELECT 1 FROM `{$transferred}` tr_prev
+                    WHERE tr_prev.family_id = f.oracle_family_id
+                      AND tr_prev.study_year = %s
+                )",
+                $previous_year
+            );
+        }
+
+        if (!empty($args['family_id'])) {
+            $where[] = 'f.oracle_family_id = %s';
+            $values[] = sanitize_text_field((string) $args['family_id']);
+        }
+        if (!empty($args['search'])) {
+            $search = sanitize_text_field((string) $args['search']);
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            if (is_numeric($search)) {
+                $where[] = '(f.oracle_family_id = %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s)';
+                array_push($values, $search, $like, $like);
+            } else {
+                $where[] = '(f.sponsor_full_name LIKE %s OR f.father_name LIKE %s OR f.mother_name LIKE %s)';
+                array_push($values, $like, $like, $like);
+            }
+        }
+
+        $where_sql = ' WHERE ' . implode(' AND ', $where);
+        $limit = min(200, max(1, absint(isset($args['limit']) ? $args['limit'] : 50)));
+        $offset = max(0, absint(isset($args['offset']) ? $args['offset'] : 0));
+
+        $base = " FROM `{$families}` f{$where_sql}";
+        $count_sql = 'SELECT COUNT(*)' . $base;
+        $rows_sql = 'SELECT f.*' . $base . ' ORDER BY CAST(f.oracle_family_id AS UNSIGNED), f.oracle_family_id LIMIT %d OFFSET %d';
+
+        $total = (int) ($values ? $wpdb->get_var($wpdb->prepare($count_sql, $values)) : $wpdb->get_var($count_sql));
+        $query_values = array_merge($values, array($limit, $offset));
+        $families_rows = $wpdb->get_results($wpdb->prepare($rows_sql, $query_values), ARRAY_A);
+
+        $student_rows_by_family = $this->student_rows_for_families($families_rows, $previous_year, $args, false);
+        $items = array();
+        foreach ($families_rows as $family) {
+            $student_rows = $student_rows_by_family[$family['family_uid']] ?? array();
+            $items[] = $this->recipient_item($family, $student_rows, null, array());
+        }
+
+        return $this->response($items, $total, $limit, $offset, 'finance_renewal_reminder', array(
+            'current_year' => $current_year,
+            'previous_year' => $previous_year,
+        ));
+    }
+
+    public function query_renewal_reminder(array $filters = array()) {
+        return $this->query_renewal_candidates(isset($filters['study_year']) ? $filters['study_year'] : '', $filters);
+    }
+
+    public function get_previous_study_year_code($current_year) {
+        $current_year = $this->canonical_study_year($current_year);
+        if ($current_year === '') {
+            return '';
+        }
+
+        $years = $this->get_study_years();
+        if ($years) {
+            $idx = array_search($current_year, $years, true);
+            if ($idx !== false && isset($years[$idx + 1])) {
+                return (string) $years[$idx + 1];
+            }
+        }
+
+        if (preg_match('/^(\d{4})\D*(\d{4})$/', $current_year, $m)) {
+            $prev_start = (int) $m[1] - 1;
+            $prev_end   = (int) $m[2] - 1;
+            $prev_code  = $prev_start . '-' . $prev_end;
+            return $this->canonical_study_year($prev_code) ?: $prev_code;
+        }
+
+        return '';
     }
 
     private function query_general(array $filters) {
@@ -302,7 +503,7 @@ class Olama_Core_Audience_Service {
      * This keeps campaign previews responsive and avoids hundreds of
      * per-family student and financial lookups.
      */
-    private function student_rows_for_families(array $families, $study_year, array $filters) {
+    private function student_rows_for_families(array $families, $study_year, array $filters, $require_active = true) {
         global $wpdb;
         $family_uids = array_values(array_unique(array_filter(wp_list_pluck($families, 'family_uid'))));
         if (!$family_uids) {
@@ -317,7 +518,9 @@ class Olama_Core_Audience_Service {
             $where[] = 'sy.study_year = %s';
             $values[] = $study_year;
         }
-        $where[] = $this->active_student_year_condition('sy');
+        if ($require_active) {
+            $where[] = $this->active_student_year_condition('sy');
+        }
         foreach (array('class_id', 'class_name', 'section_id', 'section_name') as $field) {
             if (!empty($filters[$field])) {
                 $where[] = "sy.{$field} = %s";
@@ -506,8 +709,8 @@ class Olama_Core_Audience_Service {
         );
     }
 
-    private function response(array $items, $total, $limit, $offset, $audience) {
-        return array('success' => true, 'data_source' => 'olama_core', 'audience' => $audience, 'items' => $items, 'total' => (int) $total, 'limit' => (int) $limit, 'offset' => (int) $offset);
+    private function response(array $items, $total, $limit, $offset, $audience, array $extra = array()) {
+        return array_merge(array('success' => true, 'data_source' => 'olama_core', 'audience' => $audience, 'items' => $items, 'total' => (int) $total, 'limit' => (int) $limit, 'offset' => (int) $offset), $extra);
     }
 
     private function study_year(array $filters) {
