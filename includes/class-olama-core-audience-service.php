@@ -442,9 +442,10 @@ class Olama_Core_Audience_Service {
      */
     public function get_family_ids_for_study_year($study_year) {
         global $wpdb;
-        $student_years = $this->repo->table('olama_core_student_years');
+        $student_years   = $this->repo->table('olama_core_student_years');
+        $active_condition = $this->active_student_year_condition('sy');
         $rows = $wpdb->get_col($wpdb->prepare(
-            "SELECT DISTINCT oracle_family_id FROM `{$student_years}` WHERE study_year = %s AND oracle_family_id IS NOT NULL AND oracle_family_id <> ''",
+            "SELECT DISTINCT sy.oracle_family_id FROM `{$student_years}` sy WHERE sy.study_year = %s AND sy.oracle_family_id IS NOT NULL AND sy.oracle_family_id <> '' AND {$active_condition}",
             $study_year
         ));
         return array_values(array_unique(array_map('intval', array_filter((array) $rows, 'strlen'))));
