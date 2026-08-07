@@ -318,55 +318,77 @@ class Olama_Core_Audience_Service {
         $previous_year = $this->get_previous_study_year_code($current_year);
         if ($previous_year === '' || $current_year === '') {
             return $this->response(array(), 0, 50, 0, 'finance_renewal_reminder', array(
-                'current_year' => $current_year,
+                'current_year'  => $current_year,
                 'previous_year' => $previous_year,
             ));
         }
 
-        $families = $this->repo->table('olama_core_families');
-        $student_years = $this->repo->table('olama_core_student_years');
-        $transferred = $this->repo->table('olama_core_academic_transferred_students');
-        $has_transferred_table = Olama_Core_Migrator::table_exists($transferred);
+        // ── Stage 1: PREVIOUS year family IDs ─────────────────────────────
+        // Distinct families that had at least one student-year record last year.
+        // No is_active filter — a family that did not renew may have become
+        // inactive, and that is precisely who we need to contact.
+        $previous_family_ids = $this->get_family_ids_for_study_year($previous_year);
 
-        $where = array(
-            'f.is_active = 1',
-            $wpdb->prepare(
-                "EXISTS (
-                    SELECT 1 FROM `{$student_years}` sy_prev
-                    WHERE (sy_prev.family_uid = f.family_uid OR sy_prev.oracle_family_id = f.oracle_family_id)
-                      AND sy_prev.study_year = %s
-                )",
-                $previous_year
-            ),
-            $wpdb->prepare(
-                "NOT EXISTS (
-                    SELECT 1 FROM `{$student_years}` sy_curr
-                    WHERE (sy_curr.family_uid = f.family_uid OR sy_curr.oracle_family_id = f.oracle_family_id)
-                      AND sy_curr.study_year = %s
-                )",
-                $current_year
-            ),
-        );
-        $values = array();
+        // ── Stage 2: CURRENT year family IDs ──────────────────────────────
+        // Families that already have at least one registered student this year.
+        // Family-level rule: even one enrolled child excludes the whole family.
+        $current_family_ids = $this->get_family_ids_for_study_year($current_year);
 
-        if ($has_transferred_table) {
-            $where[] = $wpdb->prepare(
-                "NOT EXISTS (
-                    SELECT 1 FROM `{$transferred}` tr_prev
-                    WHERE tr_prev.family_id = f.oracle_family_id
-                      AND tr_prev.study_year = %s
-                )",
-                $previous_year
-            );
-        }
+        // ── Stage 3: TRANSFERRED family IDs ───────────────────────────────
+        // Families whose students transferred out of the previous year's
+        // population. Uses the same source as the Core Transferred Students
+        // screen. Throws if the source is unavailable — an unknown transfer
+        // state is NOT equivalent to zero transfers.
+        $transferred_family_ids = $this->get_transferred_family_ids($previous_year);
 
+        // ── Stage 4: Set subtraction ───────────────────────────────────────
+        //
+        //   PREVIOUS YEAR FAMILIES
+        //           -
+        //   CURRENT YEAR FAMILIES
+        //           -
+        //   TRANSFERRED FAMILIES
+        //           =
+        //   RENEWAL REMINDER FAMILIES
+        //
+        $renewal_family_ids = array_values(array_diff(
+            $previous_family_ids,
+            $current_family_ids,
+            $transferred_family_ids
+        ));
+
+        // Optional family_id debug filter — eligibility is still enforced.
         if (!empty($args['family_id'])) {
-            $where[] = 'f.oracle_family_id = %s';
-            $values[] = sanitize_text_field((string) $args['family_id']);
+            $filter_id          = (int) sanitize_text_field((string) $args['family_id']);
+            $renewal_family_ids = in_array($filter_id, $renewal_family_ids, true)
+                ? array($filter_id)
+                : array();
         }
+
+        // ── Stage 5: Deterministic ordering → pagination → fetch details ───
+        sort($renewal_family_ids);
+        $total  = count($renewal_family_ids);
+        $limit  = min(200, max(1, absint(isset($args['limit'])  ? $args['limit']  : 50)));
+        $offset = max(0,   absint(isset($args['offset']) ? $args['offset'] : 0));
+        $page_ids = array_slice($renewal_family_ids, $offset, $limit);
+
+        if (!$page_ids) {
+            return $this->response(array(), $total, $limit, $offset, 'finance_renewal_reminder', array(
+                'current_year'  => $current_year,
+                'previous_year' => $previous_year,
+            ));
+        }
+
+        // Fetch family records only for the current page — no N+1 queries.
+        $families_table = $this->repo->table('olama_core_families');
+        $id_strings     = array_map('strval', $page_ids);
+        $placeholders   = implode(',', array_fill(0, count($id_strings), '%s'));
+        $where          = array("f.oracle_family_id IN ({$placeholders})");
+        $values         = $id_strings;
+
         if (!empty($args['search'])) {
             $search = sanitize_text_field((string) $args['search']);
-            $like = '%' . $wpdb->esc_like($search) . '%';
+            $like   = '%' . $wpdb->esc_like($search) . '%';
             if (is_numeric($search)) {
                 $where[] = '(f.oracle_family_id = %s OR f.father_mobile LIKE %s OR f.mother_mobile LIKE %s)';
                 array_push($values, $search, $like, $like);
@@ -376,29 +398,78 @@ class Olama_Core_Audience_Service {
             }
         }
 
-        $where_sql = ' WHERE ' . implode(' AND ', $where);
-        $limit = min(200, max(1, absint(isset($args['limit']) ? $args['limit'] : 50)));
-        $offset = max(0, absint(isset($args['offset']) ? $args['offset'] : 0));
+        $where_sql   = 'WHERE ' . implode(' AND ', $where);
+        $family_rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT f.* FROM `{$families_table}` f {$where_sql} ORDER BY CAST(f.oracle_family_id AS UNSIGNED), f.oracle_family_id",
+                $values
+            ),
+            ARRAY_A
+        );
 
-        $base = " FROM `{$families}` f{$where_sql}";
-        $count_sql = 'SELECT COUNT(*)' . $base;
-        $rows_sql = 'SELECT f.*' . $base . ' ORDER BY CAST(f.oracle_family_id AS UNSIGNED), f.oracle_family_id LIMIT %d OFFSET %d';
-
-        $total = (int) ($values ? $wpdb->get_var($wpdb->prepare($count_sql, $values)) : $wpdb->get_var($count_sql));
-        $query_values = array_merge($values, array($limit, $offset));
-        $families_rows = $wpdb->get_results($wpdb->prepare($rows_sql, $query_values), ARRAY_A);
-
-        $student_rows_by_family = $this->student_rows_for_families($families_rows, $previous_year, $args, false);
+        $student_rows_by_family = $this->student_rows_for_families($family_rows, $previous_year, $args, false);
         $items = array();
-        foreach ($families_rows as $family) {
-            $student_rows = $student_rows_by_family[$family['family_uid']] ?? array();
-            $items[] = $this->recipient_item($family, $student_rows, null, array());
+        foreach ($family_rows as $family) {
+            $uid          = (string) ($family['family_uid'] ?? '');
+            $student_rows = $student_rows_by_family[$uid] ?? array();
+            $items[]      = $this->recipient_item($family, $student_rows, null, array());
         }
 
         return $this->response($items, $total, $limit, $offset, 'finance_renewal_reminder', array(
-            'current_year' => $current_year,
+            'current_year'  => $current_year,
             'previous_year' => $previous_year,
         ));
+    }
+
+    /**
+     * Return distinct oracle_family_id integers for all families that had at
+     * least one student-year enrollment record in the given study year.
+     *
+     * No is_active filter is applied. Historical enrollment alone determines
+     * membership in the previous-year set.
+     *
+     * @param  string $study_year Canonical study year code.
+     * @return int[]              Unique oracle family IDs as integers.
+     */
+    public function get_family_ids_for_study_year($study_year) {
+        global $wpdb;
+        $student_years = $this->repo->table('olama_core_student_years');
+        $rows = $wpdb->get_col($wpdb->prepare(
+            "SELECT DISTINCT oracle_family_id FROM `{$student_years}` WHERE study_year = %s AND oracle_family_id IS NOT NULL AND oracle_family_id <> ''",
+            $study_year
+        ));
+        return array_values(array_unique(array_map('intval', array_filter((array) $rows, 'strlen'))));
+    }
+
+    /**
+     * Return distinct oracle_family_id integers for families that have at least
+     * one student recorded as transferred in the given study year.
+     *
+     * Uses the same authoritative source table as the Olama Core Transferred
+     * Students screen (olama_core_academic_transferred_students).
+     *
+     * IMPORTANT: If the transferred-students table does not exist, this method
+     * throws a RuntimeException. An unknown transfer state is NOT equivalent to
+     * zero transfers — returning a silently empty set would produce a misleading
+     * audience by including families who may have transferred.
+     *
+     * @param  string           $study_year Canonical previous study year code.
+     * @return int[]                        Unique oracle family IDs as integers.
+     * @throws RuntimeException             If the transferred-students table is absent.
+     */
+    public function get_transferred_family_ids($study_year) {
+        $transferred = $this->repo->table('olama_core_academic_transferred_students');
+        if (!Olama_Core_Migrator::table_exists($transferred)) {
+            throw new RuntimeException(
+                'Renewal Reminder audience cannot be calculated because transferred student data is unavailable.'
+            );
+        }
+        global $wpdb;
+        $rows = $wpdb->get_col($wpdb->prepare(
+            "SELECT DISTINCT family_id FROM `{$transferred}` WHERE study_year = %s AND family_id IS NOT NULL AND family_id <> ''",
+            $study_year
+        ));
+        return array_values(array_unique(array_map('intval', array_filter((array) $rows, 'strlen'))));
     }
 
     public function query_renewal_reminder(array $filters = array()) {
