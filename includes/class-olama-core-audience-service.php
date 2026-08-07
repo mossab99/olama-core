@@ -165,7 +165,7 @@ class Olama_Core_Audience_Service {
                 'students' => array('table' => 'olama_core_students', 'sync_column' => 'last_synced_at', 'year_scoped' => false, 'required' => true),
                 'student_years_previous' => array('table' => 'olama_core_student_years', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $previous_year, 'required' => true),
                 'student_years_current' => array('table' => 'olama_core_student_years', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $current_year, 'required' => true),
-                'transferred_students' => array('table' => 'olama_core_academic_transferred_students', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $previous_year, 'required' => true),
+                'transferred_students' => array('table' => 'olama_core_academic_transferred_students', 'sync_column' => 'last_synced_at', 'year_scoped' => true, 'study_year' => $previous_year, 'required' => true, 'allow_empty' => true),
             );
 
             $sources = array();
@@ -192,8 +192,17 @@ class Olama_Core_Audience_Service {
                     $latest = $values ? $wpdb->get_var($wpdb->prepare($sync_sql, $values)) : $wpdb->get_var($sync_sql);
                 }
 
-                if (!empty($definition['required']) && (!$exists || $count === 0)) {
-                    $ready = false;
+                // A source is not ready when:
+                //   - required=true AND the table does not exist, OR
+                //   - required=true AND allow_empty is not set AND count=0
+                // allow_empty=true means zero rows is a valid data state (e.g., no
+                // students were transferred this year). The table must still exist.
+                if (!empty($definition['required'])) {
+                    if (!$exists) {
+                        $ready = false;
+                    } elseif ($count === 0 && empty($definition['allow_empty'])) {
+                        $ready = false;
+                    }
                 }
 
                 if ($latest) {
