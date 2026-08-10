@@ -48,13 +48,17 @@ class Olama_Core_Audience_Service {
                 continue;
             }
 
+            $canonical_year = (string) $calendar->canonical_year_code((int) $year->id);
             $oracle_year = (string) $calendar->external_year_code((int) $year->id, 'oracle');
-            if ($raw_year === $oracle_year) {
-                $years[] = $raw_year;
+            if (!isset($years[$canonical_year]) || $raw_year === $oracle_year) {
+                // Keep a valid stored Oracle value when no explicit mapping is
+                // configured, but prefer the configured Oracle code whenever
+                // both representations exist in the synchronized table.
+                $years[$canonical_year] = $raw_year;
             }
         }
 
-        return array_values(array_unique($years));
+        return array_values($years);
     }
 
     public function get_class_names($study_year = '') {
@@ -887,8 +891,7 @@ class Olama_Core_Audience_Service {
             return '';
         }
 
-        $oracle_year = (string) $calendar->external_year_code((int) $year->id, 'oracle');
-        return $value === $oracle_year ? $value : '';
+        return $value;
     }
 
     private function is_official_oracle_year_code($value) {
