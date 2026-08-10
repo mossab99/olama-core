@@ -29,6 +29,34 @@ class Olama_Core_Audience_Service {
         return $wpdb->get_col("SELECT DISTINCT study_year FROM `{$table}` WHERE study_year IS NOT NULL AND study_year <> '' ORDER BY study_year DESC");
     }
 
+    /**
+     * Return only phone-book years that are present in Core's synchronized
+     * Oracle records and use the official Oracle year code.
+     */
+    public function get_phone_book_study_years() {
+        $calendar = olama_core()->academic_calendar();
+        $years    = array();
+
+        foreach ($this->get_study_years() as $raw_year) {
+            $raw_year = trim((string) $raw_year);
+            if (!$this->is_official_oracle_year_code($raw_year)) {
+                continue;
+            }
+
+            $year = $calendar->resolve_external_year('oracle', $raw_year);
+            if (!$year) {
+                continue;
+            }
+
+            $oracle_year = (string) $calendar->external_year_code((int) $year->id, 'oracle');
+            if ($raw_year === $oracle_year) {
+                $years[] = $raw_year;
+            }
+        }
+
+        return array_values(array_unique($years));
+    }
+
     public function get_class_names($study_year = '') {
         return $this->distinct_year_values('class_name', $study_year);
     }
@@ -46,9 +74,9 @@ class Olama_Core_Audience_Service {
     public function query_phone_book($study_year, array $args = array()) {
         global $wpdb;
 
-        $study_year = $this->canonical_study_year($study_year);
+        $study_year = $this->phone_book_study_year($study_year);
         if ($study_year === '') {
-            $years = $this->get_study_years();
+            $years = $this->get_phone_book_study_years();
             $study_year = $years ? (string) $years[0] : '';
         }
         if ($study_year === '') {
@@ -845,5 +873,29 @@ class Olama_Core_Audience_Service {
         $calendar = olama_core()->academic_calendar();
         $year = $calendar->resolve_external_year('oracle', $value);
         return $year ? $calendar->canonical_year_code((int) $year->id) : '';
+    }
+
+    private function phone_book_study_year($value) {
+        $value = trim(sanitize_text_field((string) $value));
+        if (!$this->is_official_oracle_year_code($value)) {
+            return '';
+        }
+
+        $calendar = olama_core()->academic_calendar();
+        $year = $calendar->resolve_external_year('oracle', $value);
+        if (!$year) {
+            return '';
+        }
+
+        $oracle_year = (string) $calendar->external_year_code((int) $year->id, 'oracle');
+        return $value === $oracle_year ? $value : '';
+    }
+
+    private function is_official_oracle_year_code($value) {
+        if (!preg_match('/^(\\d{4})[-\\/](\\d{4})$/', (string) $value, $matches)) {
+            return false;
+        }
+
+        return ((int) $matches[2]) === ((int) $matches[1]) + 1;
     }
 }
