@@ -105,6 +105,55 @@ class Olama_Core_Family_Service {
         return array('operation' => 'created', 'status' => 'success', 'id' => (int) $id, 'uid' => $normalized['family_uid']);
     }
 
+    /**
+     * Refresh only Oracle-owned address and transportation-region fields.
+     * Empty Oracle values are authoritative here and deliberately clear stale data.
+     */
+    public function update_location_from_source(array $data) {
+        $oracle_id = sanitize_text_field((string) ($data['oracle_family_id'] ?? $data['family_id'] ?? ''));
+        if ('' === $oracle_id) {
+            throw new InvalidArgumentException('Missing oracle_family_id.');
+        }
+
+        $existing = $this->get_by_oracle_id($oracle_id);
+        if (!$existing) {
+            return array('operation' => 'missing', 'status' => 'skipped', 'uid' => 'ORA-FAM-' . $oracle_id);
+        }
+
+        $address = $this->textarea($data, array('family_address', 'address'));
+        $location = array(
+            'address' => $address,
+            'family_address' => $address,
+            'building_no' => $this->text_any($data, array('building_no', 'building_number')),
+            'home_no' => $this->text_any($data, array('home_no', 'house_no', 'home_number')),
+            'trans_region_id' => $this->text_any($data, array('trans_region_id', 'transportation_region_id', 'region_id')),
+            'trans_region_name' => $this->text_any($data, array('trans_region_name', 'transportation_region_name', 'region_name', 'area_name')),
+        );
+        $changed = false;
+        foreach ($location as $key => $value) {
+            if ((string) ($existing[$key] ?? '') !== (string) ($value ?? '')) {
+                $changed = true;
+                break;
+            }
+        }
+
+        $now = current_time('mysql');
+        if ($changed) {
+            $location['updated_at'] = $now;
+            $location['last_synced_at'] = $now;
+            $this->repo->update($this->table, $location, array('id' => (int) $existing['id']));
+        } else {
+            $this->repo->update($this->table, array('last_synced_at' => $now), array('id' => (int) $existing['id']));
+        }
+
+        return array(
+            'operation' => $changed ? 'updated' : 'skipped',
+            'status' => 'success',
+            'id' => (int) $existing['id'],
+            'uid' => $existing['family_uid'],
+        );
+    }
+
     public function count($args = array()) {
         return $this->repo->count($this->table, $args);
     }
