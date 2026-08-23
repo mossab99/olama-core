@@ -128,7 +128,7 @@ class Olama_Core_Audience_Service {
         $query_values = array_merge($values, array($limit, $offset));
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT f.oracle_family_id, f.sponsor_full_name, f.father_name, f.father_mobile,
+                "SELECT f.family_uid, f.oracle_family_id, f.sponsor_full_name, f.father_name, f.father_mobile,
                         f.mother_name, f.mother_mobile, f.primary_mobile, f.family_address,
                         f.address, f.family_home_phone, f.last_synced_at
                  FROM `{$families}` f
@@ -140,8 +140,14 @@ class Olama_Core_Audience_Service {
             ARRAY_A
         );
 
+        // The phone-book consumer also needs the active student placement for
+        // contact names and grade/section exports. Keep this lookup batched so
+        // it remains one query for the whole page of families.
+        $student_rows_by_family = $this->student_rows_for_families( $rows, $study_year, array() );
+
         $items = array();
         foreach ((array) $rows as $row) {
+			$student_rows = $student_rows_by_family[ (string) ( $row['family_uid'] ?? '' ) ] ?? array();
             $items[] = array(
                 'family_id' => (string) $row['oracle_family_id'],
                 'sponsor_name' => (string) ($row['sponsor_full_name'] ?? ''),
@@ -153,6 +159,10 @@ class Olama_Core_Audience_Service {
                 'address' => (string) (($row['family_address'] ?? '') ?: ($row['address'] ?? '')),
                 'home_phone' => (string) ($row['family_home_phone'] ?? ''),
                 'last_synced_at' => $row['last_synced_at'] ?? null,
+				'students' => array_values( array_filter( wp_list_pluck( $student_rows, 'student_name' ) ) ),
+				'student_rows' => $student_rows,
+				'class_names' => array_values( array_unique( array_filter( wp_list_pluck( $student_rows, 'class_name' ) ) ) ),
+				'section_names' => array_values( array_unique( array_filter( wp_list_pluck( $student_rows, 'section_name' ) ) ) ),
             );
         }
 
