@@ -32,11 +32,13 @@ class Olama_Core_Transport_Master_Service {
                 if (!is_array($row)) {
                     throw new InvalidArgumentException('Invalid transport bus row.');
                 }
-                $oracle_id = $this->text($row, array('oracle_bus_id', 'bus_id', 'bus_school_id'));
-                $bus_number = $this->text($row, array('bus_number', 'bus_school_num'));
-                if ($oracle_id === '' || $bus_number === '') {
-                    throw new InvalidArgumentException('Transport bus requires Oracle ID and bus number.');
-                }
+                // BUS_SCHOOL_ID is the academy's operational bus identifier.
+                // BUS_SCHOOL_NUM is only the Oracle form sequence/display
+                // number and must never become the canonical bus identity.
+                // The Bridge must expose this column explicitly. Falling back
+                // to school_id/oracle_bus_id is unsafe because older Bridge
+                // versions populate both with BUS_SCHOOL_NUM.
+                list($oracle_id, $bus_number, $legacy_number) = $this->bus_identity($row);
 
                 $uid = 'ORA-BUS-' . $oracle_id;
                 $seen[] = $uid;
@@ -46,12 +48,23 @@ class Olama_Core_Transport_Master_Service {
                 ), ARRAY_A);
                 if (!$existing) {
                     // Migrate earlier composite IDs (school:bus) to the stable
-                    // bus number used by Oracle transportation assignments.
+                    // operational ID used by Oracle transportation assignments.
                     $existing = $wpdb->get_row($wpdb->prepare(
                         "SELECT id, source_hash FROM `{$this->buses_table}`
                          WHERE source_system = 'oracle' AND bus_number = %s
                          ORDER BY is_active DESC, id ASC LIMIT 1",
                         $bus_number
+                    ), ARRAY_A);
+                }
+                if (!$existing && $legacy_number !== '' && $legacy_number !== $bus_number) {
+                    // One-time migration from the incorrectly used
+                    // BUS_SCHOOL_NUM to BUS_SCHOOL_ID. Updating the same Core
+                    // row preserves its internal ID and avoids duplicate buses.
+                    $existing = $wpdb->get_row($wpdb->prepare(
+                        "SELECT id, source_hash FROM `{$this->buses_table}`
+                         WHERE source_system = 'oracle' AND bus_number = %s
+                         ORDER BY is_active DESC, id ASC LIMIT 1",
+                        $legacy_number
                     ), ARRAY_A);
                 }
                 $driver_id = $this->text($row, array('driver_employee_id', 'emp_id'));
@@ -219,6 +232,21 @@ class Olama_Core_Transport_Master_Service {
         return array(
             'buses' => $wpdb->get_var("SELECT MAX(last_synced_at) FROM `{$this->buses_table}`"),
             'regions' => $wpdb->get_var("SELECT MAX(last_synced_at) FROM `{$this->regions_table}`"),
+        );
+    }
+
+    private function bus_identity(array $row) {
+        $operational_id = $this->text($row, array('bus_school_id', 'BUS_SCHOOL_ID'));
+        if ($operational_id === '') {
+            throw new InvalidArgumentException(
+                'Transportation bus payload is missing BUS_SCHOOL_ID. The Oracle Bridge must expose it as bus_school_id; BUS_SCHOOL_NUM is not a valid bus identifier.'
+            );
+        }
+
+        return array(
+            $operational_id,
+            $operational_id,
+            $this->text($row, array('bus_number', 'bus_school_num', 'BUS_SCHOOL_NUM')),
         );
     }
 
