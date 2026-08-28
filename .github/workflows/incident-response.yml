@@ -76,7 +76,7 @@ jobs:
               find "${DOCROOT}/wp-content/uploads" -type f -name '*.php' -print 2>/dev/null || true
               find "${DOCROOT}/wp-content/mu-plugins" -type f -print 2>/dev/null || true
               for f in advanced-cache.php object-cache.php db.php sunrise.php; do
-                [ -f "${DOCROOT}/wp-content/${f}" ] && echo "${DOCROOT}/wp-content/${f}"
+                if [ -f "${DOCROOT}/wp-content/${f}" ]; then echo "${DOCROOT}/wp-content/${f}"; fi
               done
             } | sort -u | tee "${OUT}/special-php-paths.txt"
             while IFS= read -r f; do if [ -f "${f}" ]; then sha256sum "${f}" || true; fi; done < "${OUT}/special-php-paths.txt" || true
@@ -115,8 +115,8 @@ jobs:
             wp --allow-root --path="${DOCROOT}" cron event list --fields=hook,next_run_gmt,recurrence --format=table
 
             echo "=== DIRECT ORIGIN RESPONSE IOC REFERENCES ==="
-            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Mozilla/5.0' https://olama.online/ -o "${OUT}/origin-browser.html"
-            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Googlebot/2.1 (+http://www.google.com/bot.html)' https://olama.online/ -o "${OUT}/origin-googlebot.html"
+            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Mozilla/5.0' https://olama.online/ -o "${OUT}/origin-browser.html" || true
+            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Googlebot/2.1 (+http://www.google.com/bot.html)' https://olama.online/ -o "${OUT}/origin-googlebot.html" || true
             grep -nE "${IOC}|serviceWorker|<script" "${OUT}/origin-browser.html" | tail -80 || true
             echo "--- googlebot ---"
             grep -nE "${IOC}|serviceWorker|<script" "${OUT}/origin-googlebot.html" | tail -80 || true
