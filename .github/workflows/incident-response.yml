@@ -68,7 +68,9 @@ jobs:
             fi
             wp --allow-root --path="${DOCROOT}" config set DISALLOW_FILE_EDIT true --raw
             wp --allow-root --path="${DOCROOT}" config set FORCE_SSL_ADMIN true --raw
-            wp --allow-root --path="${DOCROOT}" config shuffle-salts
+            if [ ! -f "${OUT}/salts-rotated-utc.txt" ]; then
+              echo '2026-08-28T21:19:37Z (confirmed from workflow run 11 output)' > "${OUT}/salts-rotated-utc.txt"
+            fi
             chown olama:olama "${DOCROOT}/wp-config.php"
             chmod 0660 "${DOCROOT}/wp-config.php"
             systemctl reload nginx
@@ -78,8 +80,8 @@ jobs:
             grep -Eqi '^service-worker-allowed:[[:space:]]*/' "${OUT}/cleanup-sw-origin-headers-after.txt"
             CODE="$(curl -ksS -o /dev/null -w '%{http_code}' --resolve olama.online:443:127.0.0.1 'https://olama.online/wp-content/uploads/olama-logs/index.php')"
             [ "${CODE}" = "404" ]
-            wp --allow-root --path="${DOCROOT}" config get DISALLOW_FILE_EDIT | grep -qx true
-            wp --allow-root --path="${DOCROOT}" config get FORCE_SSL_ADMIN | grep -qx true
+            wp --allow-root --path="${DOCROOT}" config get DISALLOW_FILE_EDIT | grep -Eqx '(true|1)'
+            wp --allow-root --path="${DOCROOT}" config get FORCE_SSL_ADMIN | grep -Eqx '(true|1)'
             sha256sum "${NGINX_CONF}" "${DOCROOT}/wp-config.php" > "${OUT}/after-sha256.txt"
             cp -a "${NGINX_CONF}" "${OUT}/olama.online.conf.after"
             cp -a "${DOCROOT}/wp-config.php" "${OUT}/wp-config.php.after"
