@@ -79,7 +79,7 @@ jobs:
                 [ -f "${DOCROOT}/wp-content/${f}" ] && echo "${DOCROOT}/wp-content/${f}"
               done
             } | sort -u | tee "${OUT}/special-php-paths.txt"
-            while IFS= read -r f; do [ -f "${f}" ] && sha256sum "${f}"; done < "${OUT}/special-php-paths.txt"
+            while IFS= read -r f; do if [ -f "${f}" ]; then sha256sum "${f}" || true; fi; done < "${OUT}/special-php-paths.txt" || true
 
             echo "=== RECENT PHP SINCE JULY 7 ==="
             find "${DOCROOT}" -xdev -type f -name '*.php' -newermt '2026-07-07 00:00:00 UTC' -printf '%TY-%Tm-%TdT%TH:%TM:%TS|%u:%g|%m|%s|%p\n' | sort > "${OUT}/recent-php.txt"
