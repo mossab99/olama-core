@@ -1,4 +1,4 @@
-name: OLAMA Stage 2 IR Investigation
+name: OLAMA Stage 2 IR Targeted Evidence
 
 on:
   push:
@@ -9,121 +9,77 @@ permissions:
   contents: read
 
 jobs:
-  investigate:
+  targeted-evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
-      - name: Preserve evidence and locate loader and persistence
+      - name: Capture loader, database, account, and access-log evidence
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          command_timeout: 45m
+          command_timeout: 30m
           script: |
             set -Eeuo pipefail
             umask 077
-
             DOCROOT="/home/olama/htdocs/olama.online"
             BACKUP="/root/olama-stage2-backup-20260828T204123Z"
-            OUT="${BACKUP}/investigation"
-            IOC='0x58460d0b3d4d6b03761c89120393c0c676676496|nochain-sw|site-helper-1317e86c55e6|runtime-sample\.js|vendor\.min\.js'
-            mkdir -p "${OUT}/evidence-files"
-            test -f "${BACKUP}/SHA256SUMS"
+            OUT="${BACKUP}/targeted-evidence"
+            PREFIX="$(wp --allow-root --path="${DOCROOT}" config get table_prefix)"
+            mkdir -p "${OUT}"
             (cd "${BACKUP}" && sha256sum -c SHA256SUMS)
 
-            echo "=== PLATFORM ==="
-            sed -n '1,80p' "${BACKUP}/inventory/platform.txt"
+            echo "=== LOADER HASHES ==="
+            sha256sum               "${DOCROOT}/wp-content/mu-plugins/nc-dropin.php"               "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/site-helper-1317e86c55e6.php"               "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/.state.json"               "${DOCROOT}/nochain-sw.js"
 
-            echo "=== PLUGINS ==="
-            wp --allow-root --path="${DOCROOT}" plugin list --fields=name,status,version,update --format=table
+            cp --parents -a               "${DOCROOT}/wp-content/mu-plugins/nc-dropin.php"               "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/site-helper-1317e86c55e6.php"               "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/.state.json"               "${DOCROOT}/nochain-sw.js"               "${OUT}"
 
-            echo "=== THEMES ==="
-            wp --allow-root --path="${DOCROOT}" theme list --fields=name,status,version,update --format=table
+            echo "=== NC-DROPIN SOURCE ==="
+            sed -n '1,260p' "${DOCROOT}/wp-content/mu-plugins/nc-dropin.php"
 
-            echo "=== ADMINISTRATORS ==="
-            wp --allow-root --path="${DOCROOT}" user list --role=administrator --fields=ID,user_login,roles,user_registered --format=table
+            echo "=== SITE-HELPER SOURCE ==="
+            sed -n '1,260p' "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/site-helper-1317e86c55e6.php"
 
-            echo "=== ALL USERS (NO EMAILS) ==="
-            wp --allow-root --path="${DOCROOT}" user list --fields=ID,user_login,roles,user_registered --format=table
+            echo "=== STATE JSON ==="
+            cat "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/.state.json"
 
-            echo "=== IOC PATHS AND HASHES ==="
-            cat "${BACKUP}/inventory/ioc-paths.txt"
-            cat "${BACKUP}/inventory/ioc-sha256.txt"
+            echo "=== RESTORE ZIP CONTENTS ==="
+            unzip -l "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6/backup/restore.zip" || true
 
-            while IFS= read -r suspect; do
-              [ -f "${suspect}" ] || continue
-              cp --parents -a "${suspect}" "${OUT}/evidence-files"
-            done < "${BACKUP}/inventory/ioc-paths.txt"
+            echo "=== ACTIVE PLUGIN OPTION ==="
+            wp --allow-root --path="${DOCROOT}" option get active_plugins --format=json
 
-            if [ -d "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" ]; then
-              tar --create --gzip --acls --xattrs --file="${OUT}/site-helper-1317e86c55e6-evidence.tar.gz" -C "${DOCROOT}/wp-content/plugins" site-helper-1317e86c55e6
-            fi
+            echo "=== DATABASE IOC OPTIONS USING LIKE ==="
+            wp --allow-root --path="${DOCROOT}" db query "SELECT option_id, option_name, autoload, LENGTH(option_value) AS value_length FROM ${PREFIX}options WHERE option_name LIKE '%nochain%' OR option_name LIKE '%site-helper%' OR option_value LIKE '%site-helper-1317e86c55e6%' OR option_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR option_value LIKE '%nochain-sw.js%' ORDER BY option_id" --table || true
 
-            echo "=== EXACT IOC CODE REFERENCES ==="
-            grep -RInE --binary-files=without-match --include='*.php' --include='*.js' --include='.htaccess' "${IOC}" "${DOCROOT}" > "${OUT}/loader-matches.txt" 2>/dev/null || true
-            sed -n '1,300p' "${OUT}/loader-matches.txt"
+            echo "=== DATABASE IOC CONTENT COUNTS ==="
+            wp --allow-root --path="${DOCROOT}" db query "SELECT 'posts' AS source, COUNT(*) AS matches FROM ${PREFIX}posts WHERE post_content LIKE '%site-helper-1317e86c55e6%' OR post_content LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR post_content LIKE '%nochain-sw.js%' UNION ALL SELECT 'postmeta', COUNT(*) FROM ${PREFIX}postmeta WHERE meta_value LIKE '%site-helper-1317e86c55e6%' OR meta_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR meta_value LIKE '%nochain-sw.js%' UNION ALL SELECT 'usermeta', COUNT(*) FROM ${PREFIX}usermeta WHERE meta_value LIKE '%site-helper-1317e86c55e6%' OR meta_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR meta_value LIKE '%nochain-sw.js%'" --table || true
 
-            echo "=== ROGUE PLUGIN TREE ==="
-            if [ -d "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" ]; then
-              find "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TS|%u:%g|%m|%s|%p\n' | sort
-              find "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" -type f -print0 | sort -z | xargs -0 sha256sum
-            fi
+            echo "=== USER REGISTRATION TIMELINE ==="
+            wp --allow-root --path="${DOCROOT}" db query "SELECT DATE(user_registered) AS registered_date, COUNT(*) AS users FROM ${PREFIX}users WHERE user_registered >= '2026-07-01' GROUP BY DATE(user_registered) ORDER BY registered_date" --table
 
-            echo "=== PHP IN UPLOADS, MU-PLUGINS, AND DROP-INS ==="
-            {
-              find "${DOCROOT}/wp-content/uploads" -type f -name '*.php' -print 2>/dev/null || true
-              find "${DOCROOT}/wp-content/mu-plugins" -type f -print 2>/dev/null || true
-              for f in advanced-cache.php object-cache.php db.php sunrise.php; do
-                if [ -f "${DOCROOT}/wp-content/${f}" ]; then echo "${DOCROOT}/wp-content/${f}"; fi
-              done
-            } | sort -u | tee "${OUT}/special-php-paths.txt"
-            while IFS= read -r f; do if [ -f "${f}" ]; then sha256sum "${f}" || true; fi; done < "${OUT}/special-php-paths.txt" || true
+            echo "=== ADMINISTRATOR ACCOUNT DETAILS ==="
+            wp --allow-root --path="${DOCROOT}" user list --role=administrator --fields=ID,user_login,user_registered,roles --format=table
 
-            echo "=== RECENT PHP SINCE JULY 7 ==="
-            find "${DOCROOT}" -xdev -type f -name '*.php' -newermt '2026-07-07 00:00:00 UTC' -printf '%TY-%Tm-%TdT%TH:%TM:%TS|%u:%g|%m|%s|%p\n' | sort > "${OUT}/recent-php.txt"
-            wc -l "${OUT}/recent-php.txt"
-            sed -n '1,400p' "${OUT}/recent-php.txt"
+            echo "=== SIMPLE HISTORY TABLES AND SCHEMA ==="
+            wp --allow-root --path="${DOCROOT}" db tables | grep -E 'simple|history' || true
+            for t in $(wp --allow-root --path="${DOCROOT}" db tables | grep -E 'simple|history' || true); do
+              echo "--- ${t} ---"
+              wp --allow-root --path="${DOCROOT}" db query "SHOW COLUMNS FROM ${t}" --table || true
+            done
 
-            echo "=== WP-CONFIG AND PHP PREPEND REFERENCES ==="
-            grep -nE '(include|require|eval|base64_decode|gzinflate|auto_prepend|auto_append)' "${DOCROOT}/wp-config.php" 2>/dev/null || true
-            grep -RInE 'auto_prepend_file|auto_append_file' /etc/php "${DOCROOT}/.user.ini" "${DOCROOT}/php.ini" 2>/dev/null || true
-
-            echo "=== NGINX IOC OR SERVICE WORKER REFERENCES ==="
-            grep -RInE "${IOC}|service_worker|Service-Worker-Allowed" /etc/nginx 2>/dev/null || true
-
-            echo "=== SYSTEM PERSISTENCE IOC PATHS ==="
-            grep -RIlE "${IOC}" /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /etc/cron.monthly /etc/systemd/system /var/spool/cron 2>/dev/null | sort || true
-            echo "--- root crontab ---"
-            crontab -l 2>&1 || true
-            echo "--- enabled timers ---"
-            systemctl list-timers --all --no-pager 2>&1 || true
-
-            PREFIX="$(wp --allow-root --path="${DOCROOT}" config get table_prefix)"
-            echo "=== DATABASE IOC OPTION ROWS ==="
-            wp --allow-root --path="${DOCROOT}" db query "SELECT option_id, option_name, autoload FROM ${PREFIX}options WHERE option_name REGEXP 'site-helper|nochain|runtime-sample|vendor\\.min' OR option_value REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY option_id" --table || true
-
-            echo "=== DATABASE IOC POST ROWS ==="
-            wp --allow-root --path="${DOCROOT}" db query "SELECT ID, post_type, post_status, post_date FROM ${PREFIX}posts WHERE post_content REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY ID" --table || true
-
-            echo "=== DATABASE IOC META ROWS ==="
-            wp --allow-root --path="${DOCROOT}" db query "SELECT meta_id, post_id, meta_key FROM ${PREFIX}postmeta WHERE meta_value REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY meta_id" --table || true
-            wp --allow-root --path="${DOCROOT}" db query "SELECT umeta_id, user_id, meta_key FROM ${PREFIX}usermeta WHERE meta_value REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY umeta_id" --table || true
-
-            echo "=== WP-CRON EVENTS ==="
-            wp --allow-root --path="${DOCROOT}" cron event list --fields=hook,next_run_gmt,recurrence --format=table
-
-            echo "=== DIRECT ORIGIN RESPONSE IOC REFERENCES ==="
-            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Mozilla/5.0' https://olama.online/ -o "${OUT}/origin-browser.html" || true
-            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Googlebot/2.1 (+http://www.google.com/bot.html)' https://olama.online/ -o "${OUT}/origin-googlebot.html" || true
-            grep -nE "${IOC}|serviceWorker|<script" "${OUT}/origin-browser.html" | tail -80 || true
-            echo "--- googlebot ---"
-            grep -nE "${IOC}|serviceWorker|<script" "${OUT}/origin-googlebot.html" | tail -80 || true
+            echo "=== REDACTED ACCESS LOG IOC EVENTS ==="
+            find /var/log /home/olama -type f \( -name '*.log' -o -name '*.log.*' -o -name '*.gz' \) -newermt '2026-07-07 00:00:00 UTC' -print0 2>/dev/null > "${OUT}/candidate-logs.list0" || true
+            : > "${OUT}/ioc-access-events-redacted.txt"
+            while IFS= read -r -d '' lf; do
+              zgrep -hEi 'site-helper-1317e86c55e6|nochain-sw|runtime-sample|vendor\.min|plugin-install\.php|update\.php.action.upload-plugin|plugins\.php.*action=activate' "${lf}" 2>/dev/null || true
+            done < "${OUT}/candidate-logs.list0" | sed -E 's/^([^ ]+)/[redacted-ip]/' | head -400 | tee "${OUT}/ioc-access-events-redacted.txt" || true
 
             (
               cd "${OUT}"
-              find . -type f -print0 | sort -z | xargs -0 sha256sum > INVESTIGATION-SHA256SUMS
+              find . -type f -print0 | sort -z | xargs -0 sha256sum > TARGETED-EVIDENCE-SHA256SUMS
             )
             chmod -R go-rwx "${OUT}"
-            echo "INVESTIGATION_OK path=${OUT}"
+            echo "TARGETED_EVIDENCE_OK path=${OUT}"
