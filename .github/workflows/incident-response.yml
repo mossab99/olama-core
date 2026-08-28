@@ -1,4 +1,4 @@
-name: OLAMA Stage 2 IR Backup
+name: OLAMA Stage 2 IR Investigation
 
 on:
   push:
@@ -9,109 +9,121 @@ permissions:
   contents: read
 
 jobs:
-  backup:
+  investigate:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
-      - name: Create verified production backups and forensic inventory
+      - name: Preserve evidence and locate loader and persistence
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          command_timeout: 120m
+          command_timeout: 45m
           script: |
             set -Eeuo pipefail
             umask 077
 
             DOCROOT="/home/olama/htdocs/olama.online"
-            TS="$(date -u +%Y%m%dT%H%M%SZ)"
-            IRROOT="/root/olama-stage2-backup-${TS}"
-            INVENTORY="${IRROOT}/inventory"
+            BACKUP="/root/olama-stage2-backup-20260828T204123Z"
+            OUT="${BACKUP}/investigation"
+            IOC='0x58460d0b3d4d6b03761c89120393c0c676676496|nochain-sw|site-helper-1317e86c55e6|runtime-sample\.js|vendor\.min\.js'
+            mkdir -p "${OUT}/evidence-files"
+            test -f "${BACKUP}/SHA256SUMS"
+            (cd "${BACKUP}" && sha256sum -c SHA256SUMS)
 
-            test -d "${DOCROOT}"
-            test -f "${DOCROOT}/wp-config.php"
-            command -v wp >/dev/null
-            command -v tar >/dev/null
-            command -v sha256sum >/dev/null
+            echo "=== PLATFORM ==="
+            sed -n '1,80p' "${BACKUP}/inventory/platform.txt"
 
-            SITE_BYTES="$(du -sb "${DOCROOT}" | awk '{print $1}')"
-            FREE_BYTES="$(df -PB1 /root | awk 'NR==2 {print $4}')"
-            NEED_BYTES="$((SITE_BYTES + SITE_BYTES / 2 + 1073741824))"
-            if [ "${FREE_BYTES}" -lt "${NEED_BYTES}" ]; then
-              echo "BACKUP_ABORTED_INSUFFICIENT_SPACE site_bytes=${SITE_BYTES} free_bytes=${FREE_BYTES} required_bytes=${NEED_BYTES}"
-              exit 20
-            fi
+            echo "=== PLUGINS ==="
+            wp --allow-root --path="${DOCROOT}" plugin list --fields=name,status,version,update --format=table
 
-            mkdir -p "${INVENTORY}" "${IRROOT}/config"
-            chmod 700 "${IRROOT}"
+            echo "=== THEMES ==="
+            wp --allow-root --path="${DOCROOT}" theme list --fields=name,status,version,update --format=table
 
-            {
-              date -u --iso-8601=seconds
-              hostnamectl 2>/dev/null || hostname
-              uname -a
-              cat /etc/os-release 2>/dev/null || true
-              php -v 2>&1 || true
-              nginx -v 2>&1 || true
-              wp --allow-root --path="${DOCROOT}" core version
-              wp --allow-root --path="${DOCROOT}" config get table_prefix
-              wp --allow-root --path="${DOCROOT}" option get home
-              wp --allow-root --path="${DOCROOT}" option get siteurl
-            } > "${INVENTORY}/platform.txt"
+            echo "=== ADMINISTRATORS ==="
+            wp --allow-root --path="${DOCROOT}" user list --role=administrator --fields=ID,user_login,roles,user_registered --format=table
 
-            wp --allow-root --path="${DOCROOT}" plugin list --format=json > "${INVENTORY}/plugins.json"
-            wp --allow-root --path="${DOCROOT}" theme list --format=json > "${INVENTORY}/themes.json"
-            wp --allow-root --path="${DOCROOT}" user list --fields=ID,user_login,user_email,roles,user_registered --format=json > "${INVENTORY}/users.json"
-            wp --allow-root --path="${DOCROOT}" cron event list --format=json > "${INVENTORY}/wp-cron.json" || true
-            wp --allow-root --path="${DOCROOT}" core verify-checksums > "${INVENTORY}/core-checksums.txt" 2>&1 || true
+            echo "=== ALL USERS (NO EMAILS) ==="
+            wp --allow-root --path="${DOCROOT}" user list --fields=ID,user_login,roles,user_registered --format=table
 
-            crontab -l > "${INVENTORY}/root-crontab.txt" 2>&1 || true
-            systemctl list-timers --all --no-pager > "${INVENTORY}/systemd-timers.txt" 2>&1 || true
-            find /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /etc/cron.monthly -maxdepth 2 -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TS %u:%g %m %s %p\n' 2>/dev/null | sort > "${INVENTORY}/system-cron-files.txt" || true
+            echo "=== IOC PATHS AND HASHES ==="
+            cat "${BACKUP}/inventory/ioc-paths.txt"
+            cat "${BACKUP}/inventory/ioc-sha256.txt"
 
-            find "${DOCROOT}" -xdev -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TS %u:%g %m %s %p\n' | sort > "${INVENTORY}/site-file-metadata.txt"
-            find "${DOCROOT}" -xdev -type f -print0 | sort -z | xargs -0 sha256sum > "${INVENTORY}/site-files.sha256"
-
-            grep -RIl --binary-files=without-match -E '0x58460d0b3d4d6b03761c89120393c0c676676496|nochain-sw|site-helper-1317e86c55e6|runtime-sample\.js|vendor\.min\.js' "${DOCROOT}" > "${INVENTORY}/ioc-paths.txt" 2>/dev/null || true
-            find "${DOCROOT}" -xdev \( -path '*site-helper-1317e86c55e6*' -o -name 'nochain-sw.js' -o -name 'runtime-sample.js' -o -name 'vendor.min.js' \) -print | sort -u >> "${INVENTORY}/ioc-paths.txt"
-            sort -u -o "${INVENTORY}/ioc-paths.txt" "${INVENTORY}/ioc-paths.txt"
-
-            : > "${INVENTORY}/ioc-metadata.txt"
-            : > "${INVENTORY}/ioc-sha256.txt"
             while IFS= read -r suspect; do
               [ -f "${suspect}" ] || continue
-              stat --printf='%n|%s|%U:%G|%a|%y|%z\n' "${suspect}" >> "${INVENTORY}/ioc-metadata.txt"
-              sha256sum "${suspect}" >> "${INVENTORY}/ioc-sha256.txt"
-            done < "${INVENTORY}/ioc-paths.txt"
+              cp --parents -a "${suspect}" "${OUT}/evidence-files"
+            done < "${BACKUP}/inventory/ioc-paths.txt"
 
-            cp -a "${DOCROOT}/wp-config.php" "${IRROOT}/config/wp-config.php"
-            tar --create --gzip --acls --xattrs --file="${IRROOT}/site-files.tar.gz" -C "$(dirname "${DOCROOT}")" "$(basename "${DOCROOT}")"
+            if [ -d "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" ]; then
+              tar --create --gzip --acls --xattrs --file="${OUT}/site-helper-1317e86c55e6-evidence.tar.gz" -C "${DOCROOT}/wp-content/plugins" site-helper-1317e86c55e6
+            fi
 
-            wp --allow-root --path="${DOCROOT}" db export "${IRROOT}/database.sql" --add-drop-table
-            test -s "${IRROOT}/database.sql"
-            gzip -9 "${IRROOT}/database.sql"
-            gzip -t "${IRROOT}/database.sql.gz"
+            echo "=== EXACT IOC CODE REFERENCES ==="
+            grep -RInE --binary-files=without-match --include='*.php' --include='*.js' --include='.htaccess' "${IOC}" "${DOCROOT}" > "${OUT}/loader-matches.txt" 2>/dev/null || true
+            sed -n '1,300p' "${OUT}/loader-matches.txt"
 
-            tar --create --gzip --ignore-failed-read --file="${IRROOT}/server-configs.tar.gz" /etc/nginx /etc/php /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /etc/cron.monthly /var/spool/cron /etc/systemd/system /etc/ssh/sshd_config /etc/hosts /etc/fstab 2> "${INVENTORY}/config-archive-warnings.txt" || true
+            echo "=== ROGUE PLUGIN TREE ==="
+            if [ -d "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" ]; then
+              find "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TS|%u:%g|%m|%s|%p\n' | sort
+              find "${DOCROOT}/wp-content/plugins/site-helper-1317e86c55e6" -type f -print0 | sort -z | xargs -0 sha256sum
+            fi
 
-            find /var/log -type f -newermt '2026-07-07 00:00:00 UTC' -print0 > "${IRROOT}/log-files.list0"
-            tar --create --gzip --null --ignore-failed-read --file="${IRROOT}/logs-since-2026-07-07.tar.gz" --files-from="${IRROOT}/log-files.list0" 2> "${INVENTORY}/log-archive-warnings.txt" || true
-            rm -f "${IRROOT}/log-files.list0"
+            echo "=== PHP IN UPLOADS, MU-PLUGINS, AND DROP-INS ==="
+            {
+              find "${DOCROOT}/wp-content/uploads" -type f -name '*.php' -print 2>/dev/null || true
+              find "${DOCROOT}/wp-content/mu-plugins" -type f -print 2>/dev/null || true
+              for f in advanced-cache.php object-cache.php db.php sunrise.php; do
+                [ -f "${DOCROOT}/wp-content/${f}" ] && echo "${DOCROOT}/wp-content/${f}"
+              done
+            } | sort -u | tee "${OUT}/special-php-paths.txt"
+            while IFS= read -r f; do [ -f "${f}" ] && sha256sum "${f}"; done < "${OUT}/special-php-paths.txt"
 
-            tar -tzf "${IRROOT}/site-files.tar.gz" >/dev/null
-            tar -tzf "${IRROOT}/server-configs.tar.gz" >/dev/null
-            tar -tzf "${IRROOT}/logs-since-2026-07-07.tar.gz" >/dev/null
-            test "$(stat -c %s "${IRROOT}/database.sql.gz")" -gt 1024
+            echo "=== RECENT PHP SINCE JULY 7 ==="
+            find "${DOCROOT}" -xdev -type f -name '*.php' -newermt '2026-07-07 00:00:00 UTC' -printf '%TY-%Tm-%TdT%TH:%TM:%TS|%u:%g|%m|%s|%p\n' | sort > "${OUT}/recent-php.txt"
+            wc -l "${OUT}/recent-php.txt"
+            sed -n '1,400p' "${OUT}/recent-php.txt"
+
+            echo "=== WP-CONFIG AND PHP PREPEND REFERENCES ==="
+            grep -nE '(include|require|eval|base64_decode|gzinflate|auto_prepend|auto_append)' "${DOCROOT}/wp-config.php" 2>/dev/null || true
+            grep -RInE 'auto_prepend_file|auto_append_file' /etc/php "${DOCROOT}/.user.ini" "${DOCROOT}/php.ini" 2>/dev/null || true
+
+            echo "=== NGINX IOC OR SERVICE WORKER REFERENCES ==="
+            grep -RInE "${IOC}|service_worker|Service-Worker-Allowed" /etc/nginx 2>/dev/null || true
+
+            echo "=== SYSTEM PERSISTENCE IOC PATHS ==="
+            grep -RIlE "${IOC}" /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /etc/cron.monthly /etc/systemd/system /var/spool/cron 2>/dev/null | sort || true
+            echo "--- root crontab ---"
+            crontab -l 2>&1 || true
+            echo "--- enabled timers ---"
+            systemctl list-timers --all --no-pager 2>&1 || true
+
+            PREFIX="$(wp --allow-root --path="${DOCROOT}" config get table_prefix)"
+            echo "=== DATABASE IOC OPTION ROWS ==="
+            wp --allow-root --path="${DOCROOT}" db query "SELECT option_id, option_name, autoload FROM ${PREFIX}options WHERE option_name REGEXP 'site-helper|nochain|runtime-sample|vendor\\.min' OR option_value REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY option_id" --table || true
+
+            echo "=== DATABASE IOC POST ROWS ==="
+            wp --allow-root --path="${DOCROOT}" db query "SELECT ID, post_type, post_status, post_date FROM ${PREFIX}posts WHERE post_content REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY ID" --table || true
+
+            echo "=== DATABASE IOC META ROWS ==="
+            wp --allow-root --path="${DOCROOT}" db query "SELECT meta_id, post_id, meta_key FROM ${PREFIX}postmeta WHERE meta_value REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY meta_id" --table || true
+            wp --allow-root --path="${DOCROOT}" db query "SELECT umeta_id, user_id, meta_key FROM ${PREFIX}usermeta WHERE meta_value REGEXP '0x58460d0b3d4d6b03761c89120393c0c676676496|site-helper-1317e86c55e6|nochain-sw|runtime-sample\\.js' ORDER BY umeta_id" --table || true
+
+            echo "=== WP-CRON EVENTS ==="
+            wp --allow-root --path="${DOCROOT}" cron event list --fields=hook,next_run_gmt,recurrence --format=table
+
+            echo "=== DIRECT ORIGIN RESPONSE IOC REFERENCES ==="
+            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Mozilla/5.0' https://olama.online/ -o "${OUT}/origin-browser.html"
+            curl -ksS --resolve olama.online:443:127.0.0.1 -A 'Googlebot/2.1 (+http://www.google.com/bot.html)' https://olama.online/ -o "${OUT}/origin-googlebot.html"
+            grep -nE "${IOC}|serviceWorker|<script" "${OUT}/origin-browser.html" | tail -80 || true
+            echo "--- googlebot ---"
+            grep -nE "${IOC}|serviceWorker|<script" "${OUT}/origin-googlebot.html" | tail -80 || true
 
             (
-              cd "${IRROOT}"
-              sha256sum site-files.tar.gz database.sql.gz server-configs.tar.gz logs-since-2026-07-07.tar.gz > SHA256SUMS
-              sha256sum -c SHA256SUMS
-              find inventory config -type f -print0 | sort -z | xargs -0 sha256sum > EVIDENCE-SHA256SUMS
+              cd "${OUT}"
+              find . -type f -print0 | sort -z | xargs -0 sha256sum > INVESTIGATION-SHA256SUMS
             )
-
-            chmod -R go-rwx "${IRROOT}"
-            echo "BACKUP_OK path=${IRROOT}"
-            du -h "${IRROOT}/site-files.tar.gz" "${IRROOT}/database.sql.gz" "${IRROOT}/server-configs.tar.gz" "${IRROOT}/logs-since-2026-07-07.tar.gz"
-            cat "${IRROOT}/SHA256SUMS"
+            chmod -R go-rwx "${OUT}"
+            echo "INVESTIGATION_OK path=${OUT}"
