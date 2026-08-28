@@ -1,0 +1,117 @@
+name: OLAMA Stage 2 IR Backup
+
+on:
+  push:
+    branches:
+      - codex/olama-stage2-ir
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Create verified production backups and forensic inventory
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          command_timeout: 120m
+          script: |
+            set -Eeuo pipefail
+            umask 077
+
+            DOCROOT="/home/olama/htdocs/olama.online"
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            IRROOT="/root/olama-stage2-backup-${TS}"
+            INVENTORY="${IRROOT}/inventory"
+
+            test -d "${DOCROOT}"
+            test -f "${DOCROOT}/wp-config.php"
+            command -v wp >/dev/null
+            command -v tar >/dev/null
+            command -v sha256sum >/dev/null
+
+            SITE_BYTES="$(du -sb "${DOCROOT}" | awk '{print $1}')"
+            FREE_BYTES="$(df -PB1 /root | awk 'NR==2 {print $4}')"
+            NEED_BYTES="$((SITE_BYTES + SITE_BYTES / 2 + 1073741824))"
+            if [ "${FREE_BYTES}" -lt "${NEED_BYTES}" ]; then
+              echo "BACKUP_ABORTED_INSUFFICIENT_SPACE site_bytes=${SITE_BYTES} free_bytes=${FREE_BYTES} required_bytes=${NEED_BYTES}"
+              exit 20
+            fi
+
+            mkdir -p "${INVENTORY}" "${IRROOT}/config"
+            chmod 700 "${IRROOT}"
+
+            {
+              date -u --iso-8601=seconds
+              hostnamectl 2>/dev/null || hostname
+              uname -a
+              cat /etc/os-release 2>/dev/null || true
+              php -v 2>&1 || true
+              nginx -v 2>&1 || true
+              wp --allow-root --path="${DOCROOT}" core version
+              wp --allow-root --path="${DOCROOT}" config get table_prefix
+              wp --allow-root --path="${DOCROOT}" option get home
+              wp --allow-root --path="${DOCROOT}" option get siteurl
+            } > "${INVENTORY}/platform.txt"
+
+            wp --allow-root --path="${DOCROOT}" plugin list --format=json > "${INVENTORY}/plugins.json"
+            wp --allow-root --path="${DOCROOT}" theme list --format=json > "${INVENTORY}/themes.json"
+            wp --allow-root --path="${DOCROOT}" user list --fields=ID,user_login,user_email,roles,user_registered --format=json > "${INVENTORY}/users.json"
+            wp --allow-root --path="${DOCROOT}" cron event list --format=json > "${INVENTORY}/wp-cron.json" || true
+            wp --allow-root --path="${DOCROOT}" core verify-checksums > "${INVENTORY}/core-checksums.txt" 2>&1 || true
+
+            crontab -l > "${INVENTORY}/root-crontab.txt" 2>&1 || true
+            systemctl list-timers --all --no-pager > "${INVENTORY}/systemd-timers.txt" 2>&1 || true
+            find /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /etc/cron.monthly -maxdepth 2 -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TS %u:%g %m %s %p\n' 2>/dev/null | sort > "${INVENTORY}/system-cron-files.txt" || true
+
+            find "${DOCROOT}" -xdev -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TS %u:%g %m %s %p\n' | sort > "${INVENTORY}/site-file-metadata.txt"
+            find "${DOCROOT}" -xdev -type f -print0 | sort -z | xargs -0 sha256sum > "${INVENTORY}/site-files.sha256"
+
+            grep -RIl --binary-files=without-match -E '0x58460d0b3d4d6b03761c89120393c0c676676496|nochain-sw|site-helper-1317e86c55e6|runtime-sample\.js|vendor\.min\.js' "${DOCROOT}" > "${INVENTORY}/ioc-paths.txt" 2>/dev/null || true
+            find "${DOCROOT}" -xdev \( -path '*site-helper-1317e86c55e6*' -o -name 'nochain-sw.js' -o -name 'runtime-sample.js' -o -name 'vendor.min.js' \) -print | sort -u >> "${INVENTORY}/ioc-paths.txt"
+            sort -u -o "${INVENTORY}/ioc-paths.txt" "${INVENTORY}/ioc-paths.txt"
+
+            : > "${INVENTORY}/ioc-metadata.txt"
+            : > "${INVENTORY}/ioc-sha256.txt"
+            while IFS= read -r suspect; do
+              [ -f "${suspect}" ] || continue
+              stat --printf='%n|%s|%U:%G|%a|%y|%z\n' "${suspect}" >> "${INVENTORY}/ioc-metadata.txt"
+              sha256sum "${suspect}" >> "${INVENTORY}/ioc-sha256.txt"
+            done < "${INVENTORY}/ioc-paths.txt"
+
+            cp -a "${DOCROOT}/wp-config.php" "${IRROOT}/config/wp-config.php"
+            tar --create --gzip --acls --xattrs --file="${IRROOT}/site-files.tar.gz" -C "$(dirname "${DOCROOT}")" "$(basename "${DOCROOT}")"
+
+            wp --allow-root --path="${DOCROOT}" db export "${IRROOT}/database.sql" --add-drop-table
+            test -s "${IRROOT}/database.sql"
+            gzip -9 "${IRROOT}/database.sql"
+            gzip -t "${IRROOT}/database.sql.gz"
+
+            tar --create --gzip --ignore-failed-read --file="${IRROOT}/server-configs.tar.gz" /etc/nginx /etc/php /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /etc/cron.monthly /var/spool/cron /etc/systemd/system /etc/ssh/sshd_config /etc/hosts /etc/fstab 2> "${INVENTORY}/config-archive-warnings.txt" || true
+
+            find /var/log -type f -newermt '2026-07-07 00:00:00 UTC' -print0 > "${IRROOT}/log-files.list0"
+            tar --create --gzip --null --ignore-failed-read --file="${IRROOT}/logs-since-2026-07-07.tar.gz" --files-from="${IRROOT}/log-files.list0" 2> "${INVENTORY}/log-archive-warnings.txt" || true
+            rm -f "${IRROOT}/log-files.list0"
+
+            tar -tzf "${IRROOT}/site-files.tar.gz" >/dev/null
+            tar -tzf "${IRROOT}/server-configs.tar.gz" >/dev/null
+            tar -tzf "${IRROOT}/logs-since-2026-07-07.tar.gz" >/dev/null
+            test "$(stat -c %s "${IRROOT}/database.sql.gz")" -gt 1024
+
+            (
+              cd "${IRROOT}"
+              sha256sum site-files.tar.gz database.sql.gz server-configs.tar.gz logs-since-2026-07-07.tar.gz > SHA256SUMS
+              sha256sum -c SHA256SUMS
+              find inventory config -type f -print0 | sort -z | xargs -0 sha256sum > EVIDENCE-SHA256SUMS
+            )
+
+            chmod -R go-rwx "${IRROOT}"
+            echo "BACKUP_OK path=${IRROOT}"
+            du -h "${IRROOT}/site-files.tar.gz" "${IRROOT}/database.sql.gz" "${IRROOT}/server-configs.tar.gz" "${IRROOT}/logs-since-2026-07-07.tar.gz"
+            cat "${IRROOT}/SHA256SUMS"
