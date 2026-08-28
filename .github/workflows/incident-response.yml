@@ -1,4 +1,4 @@
-name: OLAMA Stage 2 IR Post-Containment Audit
+name: OLAMA Stage 2 IR Nginx Audit
 on:
   push:
     branches:
@@ -6,71 +6,39 @@ on:
 permissions:
   contents: read
 jobs:
-  audit:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
-      - name: Run integrity, persistence, account, and configuration checks
+      - name: Inspect service worker routing and concise remediation state
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          command_timeout: 40m
+          command_timeout: 15m
           script: |
             set -Eeuo pipefail
-            umask 077
-            export WP_CLI_PHP_ARGS='-d error_reporting=24575 -d display_errors=0'
             DOCROOT="/home/olama/htdocs/olama.online"
             BACKUP="/root/olama-stage2-backup-20260828T204123Z"
-            OUT="${BACKUP}/post-containment-audit"
             PREFIX="$(wp --allow-root --path="${DOCROOT}" config get table_prefix)"
-            mkdir -p "${OUT}"
-            (cd "${BACKUP}" && sha256sum -c SHA256SUMS)
-            echo '=== CORE CHECKSUMS ==='
-            wp --allow-root --path="${DOCROOT}" core verify-checksums 2>&1 | tee "${OUT}/core-checksums.txt" || true
-            echo '=== PLUGIN CHECKSUMS ==='
-            wp --allow-root --path="${DOCROOT}" plugin verify-checksums --all --strict 2>&1 | tee "${OUT}/plugin-checksums.txt" || true
-            echo '=== PLUGIN INVENTORY ==='
-            wp --allow-root --path="${DOCROOT}" plugin list --fields=name,status,version,update,update_version --format=table 2>&1 | tee "${OUT}/plugins.txt"
-            echo '=== THEME INVENTORY ==='
-            wp --allow-root --path="${DOCROOT}" theme list --fields=name,status,version,update,update_version --format=table 2>&1 | tee "${OUT}/themes.txt"
-            echo '=== IOC FILESYSTEM SEARCH ==='
-            grep -RIlE 'site-helper-1317e86c55e6|0x58460d0b3d4d6b03761c89120393c0c676676496|nochain_bootstrap|runtime-sample\.js|nochain_plant|nochain_admin_ips' "${DOCROOT}" --exclude='nochain-sw.js' --exclude='olama-security-cleanup.php' 2>/dev/null | tee "${OUT}/ioc-files.txt" || true
-            echo '=== RECENT PHP FILES SINCE INCIDENT WINDOW ==='
-            find "${DOCROOT}" -xdev -type f -name '*.php' -newermt '2026-07-07 00:00:00 UTC' -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %u:%g %m %p\n' | sort | tee "${OUT}/recent-php.txt"
-            echo '=== EXECUTABLE OR PHP-LIKE FILES IN UPLOADS ==='
-            find "${DOCROOT}/wp-content/uploads" -xdev -type f \( -iname '*.php' -o -iname '*.phtml' -o -iname '*.phar' -o -iname '*.php.*' -o -perm /111 \) -printf '%m %u:%g %s %p\n' | sort | tee "${OUT}/uploads-executable.txt"
-            echo '=== MUST-USE PLUGINS ==='
-            wp --allow-root --path="${DOCROOT}" plugin list --status=must-use --fields=name,status,version --format=table 2>&1 | tee "${OUT}/mu-plugins.txt"
-            echo '=== WP CRON ==='
-            wp --allow-root --path="${DOCROOT}" cron event list --fields=hook,next_run_gmt,recurrence --format=table 2>&1 | tee "${OUT}/wp-cron.txt"
-            echo '=== SYSTEM CRON AND TIMERS ==='
-            crontab -l 2>&1 | tee "${OUT}/root-crontab.txt" || true
-            find /etc/cron.d /etc/cron.daily /etc/cron.hourly /etc/cron.weekly /var/spool/cron -maxdepth 2 -type f -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %m %u:%g %p\n' 2>/dev/null | sort | tee "${OUT}/system-cron-files.txt"
-            systemctl list-timers --all --no-pager | tee "${OUT}/system-timers.txt"
-            echo '=== DATABASE IOC COUNTS ==='
-            wp --allow-root --path="${DOCROOT}" db query "SELECT 'options' source,COUNT(*) matches FROM ${PREFIX}options WHERE option_name LIKE '%nochain%' OR option_name LIKE '%site-helper%' OR option_value LIKE '%site-helper-1317e86c55e6%' OR option_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR option_value LIKE '%nochain-sw.js%' UNION ALL SELECT 'posts',COUNT(*) FROM ${PREFIX}posts WHERE post_content LIKE '%site-helper-1317e86c55e6%' OR post_content LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR post_content LIKE '%nochain-sw.js%' UNION ALL SELECT 'postmeta',COUNT(*) FROM ${PREFIX}postmeta WHERE meta_value LIKE '%site-helper-1317e86c55e6%' OR meta_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR meta_value LIKE '%nochain-sw.js%' UNION ALL SELECT 'usermeta',COUNT(*) FROM ${PREFIX}usermeta WHERE meta_value LIKE '%site-helper-1317e86c55e6%' OR meta_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR meta_value LIKE '%nochain-sw.js%'" --table | tee "${OUT}/database-ioc-counts.txt"
-            echo '=== ADMINISTRATORS ==='
-            wp --allow-root --path="${DOCROOT}" user list --role=administrator --fields=ID,user_login,user_registered,roles --format=table 2>&1 | tee "${OUT}/administrators.txt"
-            echo '=== SUSPICIOUS ADMIN METADATA ==='
-            wp --allow-root --path="${DOCROOT}" db query "SELECT u.ID,u.user_login,u.user_registered,LEFT(u.user_email,LOCATE('@',u.user_email)-1) email_local,IF(LOCATE('@',u.user_email)>0,SUBSTRING(u.user_email,LOCATE('@',u.user_email)+1),'') email_domain,m.meta_key,LEFT(m.meta_value,300) meta_value FROM ${PREFIX}users u LEFT JOIN ${PREFIX}usermeta m ON m.user_id=u.ID WHERE u.ID IN (10850,10857,10986) AND m.meta_key IN ('wp_capabilities','wp_user_level','first_name','last_name','nickname','description') ORDER BY u.ID,m.meta_key" --table | tee "${OUT}/suspicious-admin-metadata.txt"
-            echo '=== USERS CREATED IN MASS-REGISTRATION WINDOW ==='
-            wp --allow-root --path="${DOCROOT}" db query "SELECT ID,user_login,user_registered FROM ${PREFIX}users WHERE user_registered BETWEEN '2026-07-20 00:00:00' AND '2026-07-23 23:59:59' ORDER BY user_registered,ID" --table | tee "${OUT}/mass-registration-users.txt"
-            echo '=== SERVER HARDENING STATE ==='
-            stat -c '%a %U:%G %n' "${DOCROOT}/wp-config.php" "${DOCROOT}/.htaccess" 2>/dev/null | tee "${OUT}/sensitive-file-permissions.txt" || true
-            wp --allow-root --path="${DOCROOT}" config get DISALLOW_FILE_EDIT 2>&1 | tee "${OUT}/disallow-file-edit.txt" || true
-            wp --allow-root --path="${DOCROOT}" config get FORCE_SSL_ADMIN 2>&1 | tee "${OUT}/force-ssl-admin.txt" || true
-            ufw status verbose | tee "${OUT}/ufw-status.txt" || true
-            fail2ban-client status 2>&1 | tee "${OUT}/fail2ban-status.txt" || true
-            echo '=== ORIGIN IOC RESPONSE CHECK ==='
-            for ua in 'Mozilla/5.0' 'Googlebot' 'facebookexternalhit/1.1' 'curl/8.0'; do
-              slug="$(printf '%s' "${ua}" | tr -cs 'A-Za-z0-9' '_')"
-              curl -ksS --resolve olama.online:443:127.0.0.1 -A "${ua}" https://olama.online/ -o "${OUT}/origin-${slug}.html"
-              if grep -Eqi 'site-helper-1317e86c55e6|0x58460d0b3d4d6b03761c89120393c0c676676496|nochain_bootstrap|runtime-sample\.js|vendor\.min\.js' "${OUT}/origin-${slug}.html"; then echo "IOC_FOUND ua=${ua}"; exit 61; else echo "CLEAN ua=${ua}"; fi
-            done
-            (cd "${OUT}" && find . -type f -print0 | sort -z | xargs -0 sha256sum > POST-CONTAINMENT-AUDIT-SHA256SUMS)
-            chmod -R go-rwx "${OUT}"
-            echo "POST_CONTAINMENT_AUDIT_OK path=${OUT}"
+            echo '=== NGINX SERVER FILES ==='
+            grep -RIlE 'server_name[[:space:]].*olama\.online' /etc/nginx 2>/dev/null || true
+            echo '=== NGINX OLAMA SERVER CONTEXT ==='
+            nginx -T 2>/dev/null | grep -nE -B8 -A35 'server_name[[:space:]].*olama\.online' | head -240
+            echo '=== NGINX CACHE AND PAGESPEED DIRECTIVES ==='
+            nginx -T 2>/dev/null | grep -nEi -B3 -A5 'pagespeed|expires|Cache-Control|location .*\.(js|css)' | head -260
+            echo '=== CONCISE IOC COUNTS ==='
+            wp --allow-root --path="${DOCROOT}" db query "SELECT 'options' source,COUNT(*) matches FROM ${PREFIX}options WHERE option_name LIKE '%nochain%' OR option_name LIKE '%site-helper%' OR option_value LIKE '%site-helper-1317e86c55e6%' OR option_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR option_value LIKE '%nochain-sw.js%' UNION ALL SELECT 'posts',COUNT(*) FROM ${PREFIX}posts WHERE post_content LIKE '%site-helper-1317e86c55e6%' OR post_content LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR post_content LIKE '%nochain-sw.js%' UNION ALL SELECT 'postmeta',COUNT(*) FROM ${PREFIX}postmeta WHERE meta_value LIKE '%site-helper-1317e86c55e6%' OR meta_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR meta_value LIKE '%nochain-sw.js%' UNION ALL SELECT 'usermeta',COUNT(*) FROM ${PREFIX}usermeta WHERE meta_value LIKE '%site-helper-1317e86c55e6%' OR meta_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR meta_value LIKE '%nochain-sw.js%'" --table
+            echo '=== UPLOAD EXECUTABLES ==='
+            find "${DOCROOT}/wp-content/uploads" -xdev -type f \( -iname '*.php' -o -iname '*.phtml' -o -iname '*.phar' -o -iname '*.php.*' -o -perm /111 \) -printf '%m %u:%g %s %p\n' | sort
+            echo '=== UPDATE SUMMARY ==='
+            wp --allow-root --path="${DOCROOT}" plugin list --update=available --fields=name,status,version,update_version --format=table 2>/dev/null || true
+            wp --allow-root --path="${DOCROOT}" theme list --update=available --fields=name,status,version,update_version --format=table 2>/dev/null || true
+            echo '=== ADMIN DETAILS ==='
+            wp --allow-root --path="${DOCROOT}" db query "SELECT u.ID,u.user_login,u.user_registered,IF(LOCATE('@',u.user_email)>0,SUBSTRING(u.user_email,LOCATE('@',u.user_email)+1),'') email_domain,MAX(CASE WHEN m.meta_key='wp_capabilities' THEN m.meta_value END) capabilities FROM ${PREFIX}users u JOIN ${PREFIX}usermeta m ON m.user_id=u.ID WHERE u.ID IN (1,4,10850,10857,10986) GROUP BY u.ID,u.user_login,u.user_registered,u.user_email ORDER BY u.ID" --table
+            echo '=== PUBLIC DEBUG FILES ==='
+            find "${DOCROOT}" -xdev -type f \( -name 'fix_target_type_column.php' -o -name 'scratch.php' -o -name 'tmp_test_insert.php' -o -name 'tmp_test_loop.php' -o -name 'create_prepared_campaign.php' -o -name 'debug-settings.php' -o -name 'test_opts2.php' -o -name 'local-xdebuginfo.php' \) -printf '%m %u:%g %s %TY-%Tm-%TdT%TH:%TM:%TSZ %p\n'
+            echo 'NGINX_AUDIT_OK'
 
