@@ -1,4 +1,4 @@
-name: OLAMA Stage 2 IR Hardening
+name: OLAMA Stage 2 IR Database and Account Audit
 on:
   push:
     branches:
@@ -6,11 +6,11 @@ on:
 permissions:
   contents: read
 jobs:
-  harden:
+  audit:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: Harden service worker caching, uploads, and WordPress sessions
+      - name: Inspect residual database IOCs and privileged access
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -23,73 +23,36 @@ jobs:
             umask 077
             DOCROOT="/home/olama/htdocs/olama.online"
             BACKUP="/root/olama-stage2-backup-20260828T204123Z"
-            OUT="${BACKUP}/hardening"
-            NGINX_CONF="/etc/nginx/sites-enabled/olama.online.conf"
+            OUT="${BACKUP}/database-account-audit"
+            PREFIX="$(wp --allow-root --path="${DOCROOT}" config get table_prefix)"
             mkdir -p "${OUT}"
             (cd "${BACKUP}" && sha256sum -c SHA256SUMS)
-            cp -a "${NGINX_CONF}" "${OUT}/olama.online.conf.before"
-            cp -a "${DOCROOT}/wp-config.php" "${OUT}/wp-config.php.before"
-            sha256sum "${NGINX_CONF}" "${DOCROOT}/wp-config.php" > "${OUT}/before-sha256.txt"
-            python3 - <<'PY'
-            from pathlib import Path
-            path = Path('/etc/nginx/sites-enabled/olama.online.conf')
-            text = path.read_text()
-            marker = '# OLAMA Stage 2 incident-response hardening'
-            if marker not in text:
-                needle = '  server_name olama.online www1.olama.online;\n  root /home/olama/htdocs/olama.online;\n'
-                if text.count(needle) < 2:
-                    raise SystemExit('Expected OLAMA public and upstream server blocks were not found')
-                block = '''  server_name olama.online www1.olama.online;
-              root /home/olama/htdocs/olama.online;
-            
-              # OLAMA Stage 2 incident-response hardening
-              location = /nochain-sw.js {
-                pagespeed off;
-                default_type application/javascript;
-                add_header Service-Worker-Allowed "/" always;
-                add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
-                add_header Pragma "no-cache" always;
-                add_header Expires "0" always;
-                try_files /nochain-sw.js =404;
-              }
-            
-              location ~* ^/wp-content/uploads/.*\\.(?:php[0-9]?|phtml|phar)$ {
-                deny all;
-                return 404;
-              }
-            '''
-                text = text.replace(needle, block, 1)
-                path.write_text(text)
-            PY
-            if ! nginx -t; then
-              cp -a "${OUT}/olama.online.conf.before" "${NGINX_CONF}"
-              nginx -t
-              exit 71
-            fi
-            wp --allow-root --path="${DOCROOT}" config set DISALLOW_FILE_EDIT true --raw
-            wp --allow-root --path="${DOCROOT}" config set FORCE_SSL_ADMIN true --raw
-            if [ ! -f "${OUT}/salts-rotated-utc.txt" ]; then
-              echo '2026-08-28T21:19:37Z (confirmed from workflow run 11 output)' > "${OUT}/salts-rotated-utc.txt"
-            fi
-            chown olama:olama "${DOCROOT}/wp-config.php"
-            chmod 0660 "${DOCROOT}/wp-config.php"
-            systemctl reload nginx
-            sleep 2
-            curl -ksSI --resolve olama.online:443:127.0.0.1 'https://olama.online/nochain-sw.js?verify=20260829' > "${OUT}/cleanup-sw-origin-headers-after.txt"
-            grep -Eqi '^cache-control:.*no-store' "${OUT}/cleanup-sw-origin-headers-after.txt"
-            grep -Eqi '^service-worker-allowed:[[:space:]]*/' "${OUT}/cleanup-sw-origin-headers-after.txt"
-            CODE="$(curl -ksS -o /dev/null -w '%{http_code}' --resolve olama.online:443:127.0.0.1 'https://olama.online/wp-content/uploads/olama-logs/index.php')"
-            [ "${CODE}" = "404" ]
-            wp --allow-root --path="${DOCROOT}" config get DISALLOW_FILE_EDIT | grep -Eqx '(true|1)'
-            wp --allow-root --path="${DOCROOT}" config get FORCE_SSL_ADMIN | grep -Eqx '(true|1)'
-            sha256sum "${NGINX_CONF}" "${DOCROOT}/wp-config.php" > "${OUT}/after-sha256.txt"
-            cp -a "${NGINX_CONF}" "${OUT}/olama.online.conf.after"
-            cp -a "${DOCROOT}/wp-config.php" "${OUT}/wp-config.php.after"
+            echo '=== RESIDUAL OPTION IOC CONTEXT ==='
+            wp --allow-root --path="${DOCROOT}" db query "SELECT option_id,option_name,autoload,LENGTH(option_value) value_length,CASE WHEN LOCATE('site-helper-1317e86c55e6',option_value)>0 THEN SUBSTRING(option_value,GREATEST(1,LOCATE('site-helper-1317e86c55e6',option_value)-120),360) WHEN LOCATE('0x58460d0b3d4d6b03761c89120393c0c676676496',option_value)>0 THEN SUBSTRING(option_value,GREATEST(1,LOCATE('0x58460d0b3d4d6b03761c89120393c0c676676496',option_value)-120),360) WHEN LOCATE('nochain-sw.js',option_value)>0 THEN SUBSTRING(option_value,GREATEST(1,LOCATE('nochain-sw.js',option_value)-120),360) ELSE '' END context FROM ${PREFIX}options WHERE option_name LIKE '%nochain%' OR option_name LIKE '%site-helper%' OR option_value LIKE '%site-helper-1317e86c55e6%' OR option_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR option_value LIKE '%nochain-sw.js%' ORDER BY option_id" --table | tee "${OUT}/residual-option-ioc-context.txt"
+            wp --allow-root --path="${DOCROOT}" db query "SELECT * FROM ${PREFIX}options WHERE option_name LIKE '%nochain%' OR option_name LIKE '%site-helper%' OR option_value LIKE '%site-helper-1317e86c55e6%' OR option_value LIKE '%0x58460d0b3d4d6b03761c89120393c0c676676496%' OR option_value LIKE '%nochain-sw.js%' ORDER BY option_id" --batch --raw > "${OUT}/residual-option-rows-full.tsv"
+            echo '=== ADMIN SESSION COUNTS ==='
+            wp --allow-root --path="${DOCROOT}" db query "SELECT u.ID,u.user_login,u.user_registered,IF(LOCATE('@',u.user_email)>0,SUBSTRING(u.user_email,LOCATE('@',u.user_email)+1),'') email_domain,LENGTH(COALESCE(s.meta_value,'')) session_value_length,CASE WHEN s.meta_value IS NULL THEN 0 ELSE (LENGTH(s.meta_value)-LENGTH(REPLACE(s.meta_value,'login','')))/5 END approximate_sessions FROM ${PREFIX}users u LEFT JOIN ${PREFIX}usermeta s ON s.user_id=u.ID AND s.meta_key='session_tokens' WHERE u.ID IN (1,4,10850,10857,10986) ORDER BY u.ID" --table | tee "${OUT}/admin-session-counts.txt"
+            echo '=== PRIVILEGED USER META KEYS ==='
+            wp --allow-root --path="${DOCROOT}" db query "SELECT u.ID,u.user_login,m.meta_key,LENGTH(m.meta_value) value_length FROM ${PREFIX}users u JOIN ${PREFIX}usermeta m ON m.user_id=u.ID WHERE u.ID IN (1,4,10850,10857,10986) AND (m.meta_key LIKE '%two%factor%' OR m.meta_key LIKE '%wordfence%' OR m.meta_key LIKE '%login%' OR m.meta_key='session_tokens') ORDER BY u.ID,m.meta_key" --table | tee "${OUT}/privileged-security-meta.txt"
+            echo '=== SSH AUTHORIZED KEY FINGERPRINTS ==='
+            : > "${OUT}/ssh-key-fingerprints.txt"
+            find /root /home -maxdepth 3 -type f -path '*/.ssh/authorized_keys' -print0 2>/dev/null | while IFS= read -r -d '' f; do
+              echo "FILE ${f} owner=$(stat -c '%U:%G' "${f}") mode=$(stat -c '%a' "${f}")" | tee -a "${OUT}/ssh-key-fingerprints.txt"
+              ssh-keygen -lf "${f}" 2>/dev/null | tee -a "${OUT}/ssh-key-fingerprints.txt" || true
+            done
+            cat "${OUT}/ssh-key-fingerprints.txt"
+            echo '=== LOGIN-CAPABLE SYSTEM USERS ==='
+            getent passwd | awk -F: '$7 !~ /(nologin|false)$/ {print $1 ":" $3 ":" $6 ":" $7}' | tee "${OUT}/login-capable-users.txt"
+            echo '=== DATABASE ACCOUNTS ==='
+            wp --allow-root --path="${DOCROOT}" db query "SELECT User,Host,plugin,account_locked,password_expired FROM mysql.user ORDER BY User,Host" --table 2>&1 | tee "${OUT}/database-accounts.txt" || true
+            echo '=== AUTH LOG WINDOW AROUND MALWARE MTIME ==='
+            zgrep -hE 'Aug[[:space:]]+([[:space:]]*6|[[:space:]]*7|[[:space:]]*8)|2026-08-0[678]' /var/log/auth.log* 2>/dev/null | sed -E 's/(from )[0-9a-fA-F:.]+/\1[redacted-ip]/g; s/(rhost=)[0-9a-fA-F:.]+/\1[redacted-ip]/g' | grep -Ei 'Accepted|Failed|session opened|sudo|useradd|usermod' | head -300 | tee "${OUT}/auth-window-redacted.txt" || true
+            echo '=== ORIGINAL AND CURRENT CONFIG HASHES ==='
+            sha256sum "${BACKUP}/config/wp-config.php" "${DOCROOT}/wp-config.php" | tee "${OUT}/wp-config-original-current-sha256.txt"
+            tar -tzf "${BACKUP}/server-configs.tar.gz" | grep -E 'etc/nginx/sites-(enabled|available)/olama\.online\.conf$' | tee "${OUT}/nginx-config-archive-paths.txt"
+            while IFS= read -r p; do tar -xOzf "${BACKUP}/server-configs.tar.gz" "${p}" | sha256sum | sed "s#  -#  archive:${p}#"; done < "${OUT}/nginx-config-archive-paths.txt" | tee "${OUT}/nginx-config-original-sha256.txt"
+            sha256sum /etc/nginx/sites-enabled/olama.online.conf | tee "${OUT}/nginx-config-current-sha256.txt"
+            (cd "${OUT}" && find . -type f -print0 | sort -z | xargs -0 sha256sum > DATABASE-ACCOUNT-AUDIT-SHA256SUMS)
             chmod -R go-rwx "${OUT}"
-            echo '=== HARDENING HASHES ==='
-            cat "${OUT}/before-sha256.txt" "${OUT}/after-sha256.txt"
-            echo '=== SERVICE WORKER ORIGIN HEADERS ==='
-            cat "${OUT}/cleanup-sw-origin-headers-after.txt"
-            echo "UPLOADS_PHP_HTTP=${CODE}"
-            echo 'HARDENING_OK'
+            echo 'DATABASE_ACCOUNT_AUDIT_OK'
 
