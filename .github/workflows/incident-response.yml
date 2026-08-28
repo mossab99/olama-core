@@ -42,6 +42,16 @@ jobs:
             if (is_array($history) && array_key_exists($path, $history)) {
                 unset($history[$path]);
                 update_option('SimplePluginLogger_plugin_info_before_update', $history, false);
+            } elseif (is_string($history)) {
+                $decoded = json_decode($history, true);
+                if (is_array($decoded) && array_key_exists($path, $decoded)) {
+                    unset($decoded[$path]);
+                    update_option(
+                        'SimplePluginLogger_plugin_info_before_update',
+                        wp_json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                        false
+                    );
+                }
             }
             $scrub = static function ($value) use (&$scrub, $ioc) {
                 if (is_array($value)) {
