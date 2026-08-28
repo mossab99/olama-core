@@ -40,24 +40,24 @@ jobs:
                 if text.count(needle) < 2:
                     raise SystemExit('Expected OLAMA public and upstream server blocks were not found')
                 block = '''  server_name olama.online www1.olama.online;
-  root /home/olama/htdocs/olama.online;
-
-  # OLAMA Stage 2 incident-response hardening
-  location = /nochain-sw.js {
-    pagespeed off;
-    default_type application/javascript;
-    add_header Service-Worker-Allowed "/" always;
-    add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
-    add_header Pragma "no-cache" always;
-    add_header Expires "0" always;
-    try_files /nochain-sw.js =404;
-  }
-
-  location ~* ^/wp-content/uploads/.*\\.(?:php[0-9]?|phtml|phar)$ {
-    deny all;
-    return 404;
-  }
-'''
+              root /home/olama/htdocs/olama.online;
+            
+              # OLAMA Stage 2 incident-response hardening
+              location = /nochain-sw.js {
+                pagespeed off;
+                default_type application/javascript;
+                add_header Service-Worker-Allowed "/" always;
+                add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+                add_header Pragma "no-cache" always;
+                add_header Expires "0" always;
+                try_files /nochain-sw.js =404;
+              }
+            
+              location ~* ^/wp-content/uploads/.*\\.(?:php[0-9]?|phtml|phar)$ {
+                deny all;
+                return 404;
+              }
+            '''
                 text = text.replace(needle, block, 1)
                 path.write_text(text)
             PY
