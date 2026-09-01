@@ -112,4 +112,5 @@ definitions, and master catalogue/person records are preservation data. The
 purge set consists of explicitly classified year-specific operational records,
 including lesson plans, student results/attendance, Store activity, invoices,
 messages, transportation, employee scheduling logs, and Oracle financial
-imports.
+imports. Year-scoped transferred-student records and Drive synchronization run
+logs are also archived and purged; lesson/video links remain preservation data.

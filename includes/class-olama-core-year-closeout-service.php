@@ -375,6 +375,7 @@ class Olama_Core_Year_Closeout_Service {
         $add('message_short_links', 'Message short links', $p . 'olama_msg_short_links', "REPLACE(REPLACE(study_year, '/', '-'), '_', '-') = %s", array($code));
         $add('message_queue', 'Message sending queue', $p . 'olama_msg_queue', "campaign_id IN (SELECT id FROM `{$p}olama_msg_campaigns` WHERE REPLACE(REPLACE(study_year, '/', '-'), '_', '-') = %s)", array($code));
         $add('message_recipients', 'Message campaign recipients', $p . 'olama_msg_campaign_recipients', "campaign_id IN (SELECT id FROM `{$p}olama_msg_campaigns` WHERE REPLACE(REPLACE(study_year, '/', '-'), '_', '-') = %s)", array($code));
+        $add('drive_sync_events', 'Drive synchronization events', $p . 'olama_drive_sync_events', "run_id IN (SELECT id FROM `{$p}olama_drive_sync_runs` WHERE academic_year_id = %d)", array($year_id));
         $add('transport_route_stops', 'Transportation route stops', $p . 'olama_transport_route_stops', "route_version_id IN (SELECT id FROM `{$p}olama_transport_route_versions` WHERE academic_year_id = %d)", array($year_id));
         $add('transport_optimization_runs', 'Transportation optimization runs', $p . 'olama_transport_optimization_runs', "route_version_id IN (SELECT id FROM `{$p}olama_transport_route_versions` WHERE academic_year_id = %d)", array($year_id));
         $add('transport_planning_families', 'Transportation planning group families', $p . 'olama_transport_planning_group_families', "group_id IN (SELECT id FROM `{$p}olama_transport_planning_groups` WHERE academic_year_id = %d)", array($year_id));
@@ -417,6 +418,7 @@ class Olama_Core_Year_Closeout_Service {
             array('employee_shift_schedule', 'Employee shift schedules', 'olama_shifts_schedule'),
             array('employee_shift_periods', 'Employee shift periods', 'olama_shifts_periods'),
             array('employee_cleaning_logs', 'Employee cleaning operational logs', 'olama_cleaning_logs'),
+            array('drive_sync_runs', 'Drive synchronization runs', 'olama_drive_sync_runs'),
         ) as $definition) {
             $direct($definition[0], $definition[1], $definition[2]);
         }
@@ -430,6 +432,7 @@ class Olama_Core_Year_Closeout_Service {
             array('core_grade_sections', 'Core academic grade/section mappings', 'olama_core_academic_grade_sections'),
             array('core_academic_students', 'Core academic student placements', 'olama_core_academic_students'),
             array('core_grade_subjects', 'Core academic grade/subject mappings', 'olama_core_academic_grade_subjects'),
+            array('core_transferred_students', 'Core transferred-student records', 'olama_core_academic_transferred_students'),
             array('message_tokens', 'Message payment tokens', 'olama_msg_tokens'),
             array('message_campaigns', 'Message campaigns', 'olama_msg_campaigns'),
             array('oracle_financial_import_skips', 'Oracle financial import skips', 'olama_oracle_financial_import_skips'),
@@ -452,6 +455,7 @@ class Olama_Core_Year_Closeout_Service {
         $direct('preserve_legacy_sections', 'Legacy academic section definitions', 'olama_academic_sections', 'academic_year_id', false);
         $direct('preserve_legacy_semesters', 'Legacy academic semester definitions', 'olama_academic_semesters', 'academic_year_id', false);
         $direct('preserve_legacy_teacher_assignments', 'Legacy academic teacher/curriculum mappings', 'olama_academic_teacher_assignments', 'academic_year_id', false);
+        $direct('preserve_lesson_video_links', 'Lesson/video links', 'olama_lesson_video_links', 'academic_year_id', false);
 
         return apply_filters('olama_core_year_closeout_datasets', $rows, $year);
     }
