@@ -1,0 +1,54 @@
+﻿excel_page,column,ministry_label,ministry_field_key,starred_in_workbook,repeated_output
+1,A,الرقم,row_number,no,no
+1,B,* الرقم الوطني للطالب,national_id,yes,no
+1,C,* نوع الوثيقة  (غير الاردني) (هوية،البطاقة الامنية، جواز سفر...),document_type,yes,no
+1,D,* رقم القيد (....../......) ، للطالب الأردني,civil_register,yes,no
+1,E,* الإسم الأول,first_name,yes,no
+1,F,* إسم الأب,father_name,yes,no
+1,G,*اسم الجد,grandfather_name,yes,no
+1,H,* إسم العائلة,family_name,yes,no
+1,I,* مكان الولادة,birth_place,yes,no
+1,J,* تاريخ الميلاد (يوم،شهر،سنة),birth_date,yes,no
+1,K,* الجنسية,nationality,yes,no
+1,L,* الجنس,gender,yes,no
+1,M,* مكان السكن,residence_group,yes,no
+2,R,الرقم,row_number,no,yes
+2,S,الرقم التعريفي للطالب *,student_identifier,yes,no
+2,T,اسم الطالب* ( الاول و العائلة ),student_display_name,yes,no
+2,U,الحالة * الاجتماعية,social_status,yes,no
+2,V,اسم الام *,mother_name,yes,no
+2,W,نوع * الدراسة (نظامية/ منزلية),study_type,yes,no
+2,X,*المستوى التعليمي للأب,father_education,yes,no
+2,Y,*المستوى التعليمي للأم,mother_education,yes,no
+2,Z,إسم ولي * الأمر,guardian_name,yes,no
+2,AA,* الرقم الوطني / الشخصي لولي الأمر,guardian_id,yes,no
+2,AB,* علاقة ولي الامر بالطالب,guardian_relation,yes,no
+2,AC,* عمل ولي الأمر,guardian_job,yes,no
+2,AD,* عدد أفراد الأسرة مع الوالدين (كامل افراد الاسرة),family_size,yes,no
+2,AE,* ترتيب الطالب بين أخوته (رقمأ),sibling_order,yes,no
+2,AF,* الوضع الصحي للطالب (سليم،غير سليم),health_status,yes,no
+2,AG,* الوضع الدراسي للطالب (ناجح/معيد/ متسرب/ اخرى),academic_status,yes,no
+2,AH,* نوع المساعدة الخارجية  (مساعدة مادية),external_aid,yes,no
+2,AI,* دخل الأسرة الشهري,monthly_income,yes,no
+2,AJ,* الديانة,religion,yes,no
+2,AK,* صفة بطاقة الغوث الدولية (لا يحمل بطاقة، لآجىء),refugee_card,yes,no
+2,AL,* هاتف ولي امر الطالب,guardian_phone,yes,no
+1,M,المحافظة,governorate,no,no
+1,N,اللواء,district,no,no
+1,O,القضاء,subdistrict,no,no
+1,P,التجمع,locality,no,no
+1,Q,الحي,neighborhood,no,no
+1,A2,اسم المدرسة*,school_name,yes,yes
+1,A3,الرقم الوطني للمدرسة *,school_national_id,yes,yes
+1,A4,الرقم الوطنى للبناء * (حسب السجل التجاري),building_national_id,yes,yes
+1,M2,الفرع التعليمي :,education_branch,no,no
+1,J3,الصف* : التاسع,grade,yes,no
+1,N3,الشعبة* : ب,section,yes,no
+1,M4,رقم الغرفة الصفية,classroom,no,no
+2,R2,اسم المدرسة *,school_name,yes,yes
+2,R3,الرقم الوطني للمدرسة *,school_national_id,yes,yes
+2,R4,الرقم الوطنى للبناء * (حسب السجل التجاري),building_national_id,yes,yes
+2,AH2,الفرع التعليمي :,education_branch,no,yes
+2,AE3,الصف* :,grade,yes,yes
+2,AJ3,الشعبة*:,section,yes,yes
+2,AG4,رقم الغرفة الصفية,classroom,no,yes

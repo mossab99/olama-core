@@ -619,6 +619,50 @@ class Olama_Core_Migrator {
             KEY created_at (created_at)
         ) {$charset_collate};");
 
+        $ministry_values = $wpdb->prefix . 'olama_core_ministry_values';
+        $ministry_submissions = $wpdb->prefix . 'olama_core_ministry_submissions';
+        dbDelta("CREATE TABLE {$ministry_values} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            student_uid VARCHAR(100) NOT NULL,
+            study_year VARCHAR(20) NOT NULL,
+            field_key VARCHAR(100) NOT NULL,
+            value TEXT NOT NULL,
+            source VARCHAR(50) NOT NULL,
+            original_value TEXT NULL,
+            submission_id BIGINT UNSIGNED NULL,
+            submitted_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            submitted_at DATETIME NULL,
+            reviewed_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            reviewed_at DATETIME NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_student_year_field (student_uid, study_year, field_key),
+            KEY field_key (field_key)
+        ) {$charset_collate};");
+        dbDelta("CREATE TABLE {$ministry_submissions} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            student_uid VARCHAR(100) NOT NULL,
+            study_year VARCHAR(20) NOT NULL,
+            field_key VARCHAR(100) NOT NULL,
+            current_value TEXT NULL,
+            proposed_value TEXT NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+            readiness_impact VARCHAR(20) NOT NULL DEFAULT 'BLOCKING',
+            submitted_by BIGINT UNSIGNED NOT NULL,
+            submitted_at DATETIME NOT NULL,
+            reviewed_by BIGINT UNSIGNED NULL,
+            reviewed_at DATETIME NULL,
+            PRIMARY KEY  (id),
+            KEY student_status (student_uid, status),
+            KEY year_status (study_year, status),
+            KEY field_status (field_key, status)
+        ) {$charset_collate};");
+        $old_index = $wpdb->get_var($wpdb->prepare(
+            "SHOW INDEX FROM `" . esc_sql($ministry_values) . "` WHERE Key_name = %s", 'uniq_student_field'
+        ));
+        if ($old_index) {
+            $wpdb->query("ALTER TABLE `" . esc_sql($ministry_values) . "` DROP INDEX uniq_student_field");
+        }
+
         // BUS_LICENSE_* was previously misclassified as a vehicle plate.
         $wpdb->query(
             "UPDATE `{$transport_buses}`
@@ -663,6 +707,8 @@ class Olama_Core_Migrator {
             $wpdb->prefix . 'olama_core_academic_year_source_mappings',
             $wpdb->prefix . 'olama_core_year_archives',
             $wpdb->prefix . 'olama_logs',
+            $wpdb->prefix . 'olama_core_ministry_values',
+            $wpdb->prefix . 'olama_core_ministry_submissions',
         );
     }
 

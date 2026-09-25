@@ -8,6 +8,7 @@ class Olama_Core_Container {
     private static $instance = null;
     private $families;
     private $students;
+    private $ministry;
     private $student_years;
     private $financial;
     private $transportation;
@@ -80,6 +81,13 @@ class Olama_Core_Container {
         }
 
         return $this->student_years;
+    }
+
+    public function student_statistics() {
+        if (!$this->ministry) {
+            $this->ministry = new Olama_Core_Ministry_Service($this);
+        }
+        return $this->ministry;
     }
 
     public function financial() {
