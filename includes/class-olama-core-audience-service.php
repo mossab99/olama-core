@@ -747,11 +747,13 @@ class Olama_Core_Audience_Service {
                 'student_rows' => $student_rows,
                 'class_names' => array_values(array_unique(array_filter(wp_list_pluck($student_rows, 'class_name')))),
                 'section_names' => array_values(array_unique(array_filter(wp_list_pluck($student_rows, 'section_name')))),
-                'balance' => isset($row['balance']) ? (float) $row['balance'] : null,
+                'balance' => !empty($filters['due_month'])
+                    ? (isset($row['amount_due']) ? (float) $row['amount_due'] : null)
+                    : (isset($row['balance']) ? (float) $row['balance'] : null),
                 'monthly_due' => isset($row['monthly_due']) ? $row['monthly_due'] : null,
                 'monthly_due_source' => isset($row['monthly_due']) && $row['monthly_due'] !== null ? 'due_allocation' : 'unavailable',
                 'currency' => (string) ($row['currency'] ?? 'JOD'),
-                'financial_available' => true,
+                'financial_available' => empty($filters['due_month']) || isset($row['amount_due']),
             );
         }
         return $this->response($items, absint($result['count'] ?? count($items)), absint($result['limit'] ?? 50), absint($result['offset'] ?? 0), 'financial');

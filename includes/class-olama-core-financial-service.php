@@ -173,6 +173,23 @@ class Olama_Core_Financial_Service {
         ), ARRAY_A);
     }
 
+    public function get_amount_due_through_month($family_id, $study_year, $month, $dues = null) {
+        if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string) $month)) {
+            throw new InvalidArgumentException('Invalid due month.');
+        }
+        $dues = null === $dues ? $this->get_dues($family_id, $study_year) : $dues;
+        if (!$dues) {
+            return null;
+        }
+        $total = 0;
+        foreach ($dues as $due) {
+            if (!empty($due['due_date']) && substr((string) $due['due_date'], 0, 7) <= $month) {
+                $total += (float) $due['balance'];
+            }
+        }
+        return round($total, 3);
+    }
+
     public function get_transactions($family_id, $study_year) {
         global $wpdb;
         $rows = $wpdb->get_results($wpdb->prepare(
@@ -251,6 +268,9 @@ class Olama_Core_Financial_Service {
                 continue;
             }
             $dues = $this->get_dues($row['oracle_family_id'], $study_year);
+			$selected_due = !empty($filters['due_month'])
+				? $this->get_amount_due_through_month($row['oracle_family_id'], $study_year, $filters['due_month'], $dues)
+				: null;
             $recipients[] = array(
                 'family_id' => absint($row['oracle_family_id']),
                 'family_uid' => (string) $row['family_uid'],
@@ -263,6 +283,7 @@ class Olama_Core_Financial_Service {
                 'mother_mobile' => $row['mother_mobile'],
                 'students' => $students,
                 'balance' => (float) $row['balance'],
+                'amount_due' => $selected_due,
                 'monthly_due' => $dues ? (float) $dues[0]['due_amount'] : null,
                 'currency' => $row['currency'],
             );
