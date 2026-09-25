@@ -751,7 +751,7 @@ class Olama_Core_Audience_Service {
                     ? (isset($row['amount_due']) ? (float) $row['amount_due'] : null)
                     : (isset($row['balance']) ? (float) $row['balance'] : null),
                 'monthly_due' => isset($row['monthly_due']) ? $row['monthly_due'] : null,
-                'monthly_due_source' => isset($row['monthly_due']) && $row['monthly_due'] !== null ? 'due_allocation' : 'unavailable',
+                'monthly_due_source' => isset($row['monthly_due']) && $row['monthly_due'] !== null ? 'due_balance_through_month' : 'unavailable',
                 'currency' => (string) ($row['currency'] ?? 'JOD'),
                 'financial_available' => empty($filters['due_month']) || isset($row['amount_due']),
             );
