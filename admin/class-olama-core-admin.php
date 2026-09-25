@@ -145,7 +145,7 @@ class Olama_Core_Admin {
 
     public function directory() {
         $tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : $this->quick_search_default_tab();
-        $valid_tabs = array('families', 'students', 'student_years', 'employees');
+        $valid_tabs = array('families', 'students', 'student_years', 'employees', 'financial_dues');
         if (!in_array($tab, $valid_tabs, true)) {
             $tab = $this->quick_search_default_tab();
         }
@@ -175,6 +175,8 @@ class Olama_Core_Admin {
             $this->render_student_years_directory_tab($counts);
         } elseif ('employees' === $tab) {
             $this->render_employees_directory_tab();
+        } elseif ('financial_dues' === $tab) {
+            $this->render_financial_dues_directory_tab();
         } else {
             $this->render_families_directory_tab();
         }
@@ -278,6 +280,7 @@ class Olama_Core_Admin {
             'students' => 'الطلاب',
             'student_years' => 'الالتحاق والسنوات',
             'employees' => 'الموظفون',
+            'financial_dues' => 'استحقاقات العائلات',
         );
 
         echo '<nav class="olama-tabs" aria-label="أقسام مستكشف البيانات">';
@@ -288,6 +291,51 @@ class Olama_Core_Admin {
         }
         echo '<a class="olama-tab" href="' . esc_url($this->admin_page_url('olama-core-academic-info')) . '">البنية الأكاديمية</a>';
         echo '</nav>';
+    }
+
+    private function render_financial_dues_directory_tab() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'olama_core_family_financial_dues';
+        $family_id = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $study_year = isset($_GET['study_year']) ? sanitize_text_field(wp_unslash($_GET['study_year'])) : '';
+        $where = array();
+        $values = array();
+        if ($family_id !== '') {
+            $where[] = 'oracle_family_id = %s';
+            $values[] = $family_id;
+        }
+        if ($study_year !== '') {
+            $where[] = 'study_year = %s';
+            $values[] = $study_year;
+        }
+        $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+        $count_sql = 'SELECT COUNT(*) FROM `' . esc_sql($table) . '`' . $where_sql;
+        $total = (int) $wpdb->get_var($values ? $wpdb->prepare($count_sql, $values) : $count_sql);
+        $limit = $this->directory_per_page();
+        $offset = $this->directory_offset($limit);
+        $rows = $wpdb->get_results($wpdb->prepare(
+            'SELECT * FROM `' . esc_sql($table) . '`' . $where_sql . ' ORDER BY due_date DESC, id DESC LIMIT %d OFFSET %d',
+            array_merge($values, array($limit, $offset))
+        ), ARRAY_A);
+
+        echo '<form class="olama-filter-card" method="get" action="' . esc_url(admin_url('admin.php')) . '"><input type="hidden" name="page" value="olama-core-directory"><input type="hidden" name="tab" value="financial_dues">';
+        echo '<div class="olama-filter-grid"><p><label class="olama-label">رقم العائلة</label><input name="s" value="' . esc_attr($family_id) . '"></p>';
+        echo '<p><label class="olama-label">السنة الدراسية</label><input name="study_year" value="' . esc_attr($study_year) . '"></p>';
+        echo '<p class="olama-filter-submit"><button class="olama-btn olama-btn-primary" type="submit">بحث</button></p></div></form>';
+        $this->render_directory_pagination('financial_dues', $total, $limit);
+        echo '<div class="olama-table-wrap"><table class="olama-table"><thead><tr><th>رقم العائلة</th><th>السنة الدراسية</th><th>تاريخ الاستحقاق</th><th>النسبة</th><th>قيمة الاستحقاق</th><th>المدفوع</th><th>مدفوع بالإيصالات</th><th>الرصيد</th><th>آخر مزامنة</th></tr></thead><tbody>';
+        if (!$rows) {
+            echo '<tr><td colspan="9">لا توجد استحقاقات مطابقة.</td></tr>';
+        }
+        foreach ($rows as $row) {
+            echo '<tr>';
+            foreach (array('oracle_family_id', 'study_year', 'due_date', 'percent_value', 'due_amount', 'paid_amount', 'receipt_paid', 'balance', 'last_synced_at') as $column) {
+                echo '<td>' . esc_html($this->display_value($row[$column] ?? '')) . '</td>';
+            }
+            echo '</tr>';
+        }
+        echo '</tbody></table></div>';
+        $this->render_directory_pagination('financial_dues', $total, $limit);
     }
 
     private function render_employees_directory_tab() {
